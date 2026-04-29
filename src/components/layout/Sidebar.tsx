@@ -55,14 +55,19 @@ export function Sidebar() {
   return (
     <aside className="w-64 h-screen bg-slate-900 text-white flex flex-col fixed left-0 top-0 z-50 transition-all duration-300">
       <div className="p-6 border-b border-slate-800 flex flex-col items-center text-center gap-4">
-        <img src="/logo.png" alt="MOCAAD Logo" className="w-full h-auto max-h-32 object-contain px-2" />
+        <img src="/logo.png" alt="MOCAAD Logo" className="w-full h-auto max-h-28 object-contain px-2" />
         <div className="w-full">
-          <h1 className="text-[13px] font-black tracking-tight text-white leading-tight uppercase">
+          <h1 className="text-[12px] font-black tracking-tight text-white leading-tight uppercase">
             Ministry of Civil Aviation <br /> & Airport's Development
           </h1>
-          <p className="text-[10px] text-blue-400 mt-2 uppercase tracking-[0.2em] font-black">
+          <p className="text-[9px] text-blue-400 mt-1 uppercase tracking-[0.2em] font-black">
             Republic of Somaliland
           </p>
+          <div className="mt-3 pt-3 border-t border-slate-800">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+              Travel Agency <br /> Management System
+            </p>
+          </div>
         </div>
       </div>
 
