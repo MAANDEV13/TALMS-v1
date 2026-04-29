@@ -42,7 +42,7 @@ export default function PrintLicensePage() {
 
   if (!app) return <div className="p-10 text-center">Loading Certificate...</div>;
 
-  const licenseId = `SL-STA-${app.id.toUpperCase()}`;
+  const licenseId = `${app.id.toString().padStart(3, '0')}-MOCAAD-DCA/2026`;
   const qrData = encodeURIComponent(
     `Ministry of Civil Aviation Somaliland\nAgency: ${app.agency}\nLicense ID: ${licenseId}\nIssue Date: ${todayDate}\nExpiry Date: ${expiryDate}\nStatus: VALID`
   );
@@ -197,12 +197,22 @@ export default function PrintLicensePage() {
 
         .date-box {
           text-align: left;
+          min-width: 180px;
+          padding-bottom: 5mm;
+        }
+
+        .date-label {
           font-size: 11pt;
           font-weight: 900;
           color: #1e293b;
           text-transform: uppercase;
-          min-width: 180px;
-          padding-bottom: 5mm;
+          margin-bottom: 1mm;
+        }
+
+        .date-value {
+          font-size: 11pt;
+          font-weight: 400;
+          color: #334155;
         }
 
         .signature-box {
@@ -227,7 +237,7 @@ export default function PrintLicensePage() {
 
         .dg-title {
           font-size: 10pt;
-          font-weight: 800;
+          font-weight: 400;
           color: #1e40af;
           text-transform: uppercase;
         }
@@ -293,7 +303,8 @@ export default function PrintLicensePage() {
 
               <div className="footer">
                 <div className="date-box">
-                  <p>ISSUE DATE: {todayDate}</p>
+                  <p className="date-label">ISSUED DATE</p>
+                  <p className="date-value">{todayDate}</p>
                 </div>
 
                 <div className="signature-box">
@@ -304,7 +315,8 @@ export default function PrintLicensePage() {
                 </div>
 
                 <div className="date-box text-right">
-                  <p>EXPIRY DATE: {expiryDate}</p>
+                  <p className="date-label">EXPIRY DATE</p>
+                  <p className="date-value">{expiryDate}</p>
                 </div>
               </div>
             </div>

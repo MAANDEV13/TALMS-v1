@@ -29,7 +29,7 @@ export default function LicensesPage() {
 
   const canPrint = (app: any) => {
     const isOfficer = user?.role === 'officer';
-    const isFinalApproved = app.status === 'Approved by general_director';
+    const isFinalApproved = app.status === 'Approved by general_director' || app.status === 'Approved';
     return isOfficer && isFinalApproved;
   };
 
@@ -70,16 +70,21 @@ export default function LicensesPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100">
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Agency ID</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Agency Name</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Submitted Date</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {applications.length > 0 ? applications.map((app) => (
                 <tr key={app.id} className="hover:bg-slate-50 transition-colors group cursor-pointer">
+                  <td className="px-6 py-4">
+                    <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-1 rounded uppercase tracking-tighter">
+                      {app.agencyId || (app.type === 'New' ? 'NEW' : 'N/A')}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{app.agency}</td>
                   <td className="px-6 py-4 text-sm text-slate-600">{app.type}</td>
                   <td className="px-6 py-4">
@@ -91,7 +96,6 @@ export default function LicensesPage() {
                       {app.status.replace('_', ' ')}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-500">{app.date}</td>
                   <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
                     {canPrint(app) && (
                       <button 

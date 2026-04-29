@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { MOCK_DB } from '@/lib/mockDb';
 
-export type UserRole = 'admin' | 'officer' | 'director' | 'general_director';
+export type UserRole = 'admin' | 'officer' | 'director' | 'general_director' | 'minister';
 
 interface User {
   id: string;

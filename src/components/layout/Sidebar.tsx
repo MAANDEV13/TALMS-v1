@@ -11,7 +11,10 @@ import {
   Bell, 
   LogOut,
   Building2,
-  FileCheck
+  FileCheck,
+  History,
+  Activity,
+  DollarSign
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -31,8 +34,11 @@ interface SidebarItem {
 const sidebarItems: SidebarItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
   { icon: FileText, label: 'Applications', href: '/licenses', roles: ['admin', 'officer'] },
-  { icon: Building2, label: 'Agencies', href: '/agencies' },
+  { icon: Building2, label: 'Agencies', href: '/agencies', roles: ['admin', 'officer', 'director', 'general_director'] },
   { icon: FileCheck, label: 'Approvals', href: '/approvals', roles: ['officer', 'director', 'general_director'] },
+  { icon: DollarSign, label: 'Fines', href: '/fines', roles: ['director'] },
+  { icon: History, label: 'Activity Logs', href: '/activities', roles: ['admin', 'general_director'] },
+  { icon: Activity, label: 'Reports', href: '/reports', roles: ['admin', 'minister', 'director'] },
   { icon: Users, label: 'User Management', href: '/users', roles: ['admin'] },
   { icon: Bell, label: 'Notifications', href: '/notifications' },
   { icon: Settings, label: 'Settings', href: '/settings' },

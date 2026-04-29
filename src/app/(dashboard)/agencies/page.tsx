@@ -8,21 +8,128 @@ import {
   MapPin, 
   Calendar,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
+  Edit2,
+  Trash2,
+  AlertCircle,
+  ShieldCheck,
+  CheckCircle2
 } from 'lucide-react';
+import { MOCK_DB } from '@/lib/mockDb';
+import { useAuth } from '@/context/AuthContext';
 
 export default function AgenciesPage() {
-  const agencies = [
-    { id: '1', name: 'Somaliland Travel Services', licenseId: 'SL-2023-001', city: 'Hargeisa', branches: 4, joined: 'Jan 2023', status: 'Active' },
-    { id: '2', name: 'Borama International Tours', licenseId: 'SL-2023-042', city: 'Borama', branches: 2, joined: 'Mar 2023', status: 'Active' },
-    { id: '3', name: 'Berbera Port Logistics', licenseId: 'SL-2023-115', city: 'Berbera', branches: 3, joined: 'Jun 2023', status: 'Active' },
-    { id: '4', name: 'Burao Expeditions', licenseId: 'SL-2024-008', city: 'Burao', branches: 5, joined: 'Feb 2024', status: 'Expired' },
-    { id: '5', name: 'Erigavo Eco Tours', licenseId: 'SL-2024-015', city: 'Erigavo', branches: 1, joined: 'Apr 2024', status: 'Active' },
-    { id: '6', name: 'Las Anod Express', licenseId: 'SL-2024-022', city: 'Las Anod', branches: 2, joined: 'May 2024', status: 'Active' },
-  ];
+  const { user } = useAuth();
+  const [agencies, setAgencies] = React.useState<any[]>([]);
+  const [message, setMessage] = React.useState<string | null>(null);
+  const [editingAgency, setEditingAgency] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    MOCK_DB.init();
+    setAgencies(MOCK_DB.get('agencies'));
+  }, []);
+
+  const handleRequestChange = (agencyId: string, type: 'edit' | 'delete') => {
+    if (type === 'edit') {
+      const agency = agencies.find(a => a.id === agencyId);
+      setEditingAgency({ ...agency, newName: agency.name, docs: ['National ID', 'Company Profile', 'Lease Agreement'] });
+      return;
+    }
+    
+    MOCK_DB.requestAgencyChange({
+      agencyId,
+      type,
+      requester: user?.name || 'Unknown Officer'
+    });
+    setMessage(`Your deletion request has been sent to the General Director for approval.`);
+    setTimeout(() => setMessage(null), 5000);
+  };
+
+  const submitEditRequest = () => {
+    MOCK_DB.requestAgencyChange({
+      agencyId: editingAgency.id,
+      type: 'edit',
+      data: { newName: editingAgency.newName, docs: editingAgency.docs },
+      requester: user?.name || 'Unknown Officer'
+    });
+    setEditingAgency(null);
+    setMessage(`Your edit request for ${editingAgency.name} has been sent to the General Director.`);
+    setTimeout(() => setMessage(null), 5000);
+  };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 relative">
+      {editingAgency && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-blue-600" />
+                Edit Agency Record
+              </h2>
+              <button onClick={() => setEditingAgency(null)} className="text-slate-400 hover:text-slate-600">
+                <ChevronRight className="w-6 h-6 rotate-90" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6 text-slate-900">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">Propose New Name</label>
+                <input 
+                  type="text" 
+                  value={editingAgency.newName}
+                  onChange={(e) => setEditingAgency({...editingAgency, newName: e.target.value})}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-sm font-bold text-slate-700">Document Management</label>
+                <div className="space-y-2">
+                  {editingAgency.docs.map((doc: string, i: number) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="text-sm font-medium text-slate-700">{doc}</span>
+                      <button 
+                        onClick={() => setEditingAgency({...editingAgency, docs: editingAgency.docs.filter((d: string) => d !== doc)})}
+                        className="text-red-500 hover:bg-red-50 p-1 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button 
+                  onClick={() => {
+                    const newDoc = prompt('Enter document name:');
+                    if (newDoc) setEditingAgency({...editingAgency, docs: [...editingAgency.docs, newDoc]});
+                  }}
+                  className="w-full py-2 border-2 border-dashed border-slate-200 text-slate-500 text-sm font-bold rounded-xl hover:border-blue-400 hover:text-blue-600 transition-all"
+                >
+                  + Add New Document Placeholder
+                </button>
+              </div>
+
+              <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-xs font-bold text-amber-800">
+                  IMPORTANT: This change will not be permanent until approved by the General Director.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 flex gap-3">
+              <button onClick={() => setEditingAgency(null)} className="flex-1 py-2.5 font-bold text-slate-600 hover:bg-slate-50 rounded-xl">Cancel</button>
+              <button 
+                onClick={submitEditRequest}
+                className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20"
+              >
+                Request Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Registered Agencies</h1>
@@ -30,54 +137,77 @@ export default function AgenciesPage() {
         </div>
       </div>
 
+      {message && (
+        <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-500">
+          <ShieldCheck className="w-5 h-5 text-blue-600" />
+          <p className="text-sm font-bold text-blue-800">{message}</p>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex gap-4 items-center">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input type="text" placeholder="Search agencies..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="text" placeholder="Search by name, city or License ID..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" />
           </div>
-          <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-slate-200 bg-white">
-            <Filter className="w-5 h-5" />
+          <button className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all">
+            <Filter className="w-4 h-4" />
+            <span>Filter By Region</span>
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 p-6 gap-6">
-          {agencies.map((agency) => (
-            <div key={agency.id} className="group relative bg-white border border-slate-100 rounded-2xl p-6 hover:shadow-xl hover:shadow-slate-200/40 hover:border-blue-100 transition-all cursor-pointer">
-              <div className="flex items-start justify-between">
-                <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
-                  <Building2 className="w-6 h-6" />
-                </div>
-                <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${
-                  agency.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                }`}>
-                  {agency.status}
-                </span>
-              </div>
-              
-              <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{agency.name}</h3>
-              <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">ID: {agency.licenseId}</p>
-              
-              <div className="mt-6 space-y-3">
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <MapPin className="w-4 h-4 text-slate-400" />
-                  <span>{agency.city} ({agency.branches} branches)</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <Calendar className="w-4 h-4 text-slate-400" />
-                  <span>Joined {agency.joined}</span>
-                </div>
-              </div>
-
-              <div className="mt-6 pt-6 border-t border-slate-50 flex items-center justify-between">
-                <button className="text-sm font-bold text-blue-600 flex items-center gap-1 hover:underline">
-                  View Details
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </button>
-                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-400 transition-colors" />
-              </div>
-            </div>
-          ))}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-100">
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">License ID</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Agency Name</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">City</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {agencies.map((agency) => (
+                <tr key={agency.id} className="hover:bg-slate-50 transition-colors group">
+                  <td className="px-6 py-4">
+                    <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-100 uppercase tracking-tight">
+                      {agency.licenseId}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{agency.name}</td>
+                  <td className="px-6 py-4 text-sm text-slate-600">{agency.city}</td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
+                      agency.status === 'Active' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-red-50 text-red-700 border-red-100'
+                    }`}>
+                      <CheckCircle2 className="w-3 h-3" />
+                      {agency.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                    <button 
+                      onClick={() => handleRequestChange(agency.id, 'edit')}
+                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                      title="Request Edit"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleRequestChange(agency.id, 'delete')}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                      title="Request Deletion"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
+                      <ExternalLink className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

@@ -190,6 +190,7 @@ export default function UserManagementPage() {
                   <option value="officer">Officer</option>
                   <option value="director">Director</option>
                   <option value="general_director">General Director</option>
+                  <option value="minister">Minister</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>

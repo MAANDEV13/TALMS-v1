@@ -59,5 +59,58 @@ export const MOCK_DB = {
   addUser: (user: any) => {
     const users = MOCK_DB.get('users');
     MOCK_DB.save('users', [...users, { ...user, id: Math.random().toString(36).substr(2, 9), status: 'Active' }]);
-  }
+  },
+
+  checkAgencyName: (name: string) => {
+    const agencies = MOCK_DB.get('agencies');
+    const apps = MOCK_DB.get('applications');
+    const nameExists = agencies.some((a: any) => a.name.toLowerCase() === name.toLowerCase()) ||
+                       apps.some((a: any) => a.agency.toLowerCase() === name.toLowerCase());
+    return !nameExists;
+  },
+
+  requestAgencyChange: (change: { agencyId: string, type: 'edit' | 'delete', data?: any, requester: string }) => {
+    const changes = MOCK_DB.get('agency_changes');
+    const newChange = {
+      ...change,
+      id: Math.random().toString(36).substr(2, 9),
+      status: 'Pending DG Approval',
+      date: new Date().toLocaleDateString()
+    };
+    MOCK_DB.save('agency_changes', [newChange, ...changes]);
+  },
+
+  approveAgencyChange: (changeId: string) => {
+    const changes = MOCK_DB.get('agency_changes');
+    const agencies = MOCK_DB.get('agencies');
+    const change = changes.find((c: any) => c.id === changeId);
+
+    if (!change) return;
+
+    let updatedAgencies;
+    if (change.type === 'delete') {
+      updatedAgencies = agencies.filter((a: any) => a.id !== change.agencyId);
+    } else {
+      updatedAgencies = agencies.map((a: any) => 
+        a.id === change.agencyId ? { ...a, ...change.data, name: change.data.newName || a.name } : a
+      );
+    }
+
+    MOCK_DB.save('agencies', updatedAgencies);
+    MOCK_DB.save('agency_changes', changes.filter((c: any) => c.id !== changeId));
+  },
+
+  logActivity: (userName: string, action: string, target: string) => {
+    const activities = MOCK_DB.get('activities') || [];
+    const newActivity = {
+      id: Math.random().toString(36).substr(2, 9),
+      user: userName,
+      action: action,
+      target: target,
+      timestamp: new Date().toISOString(),
+      date: new Date().toLocaleDateString(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    MOCK_DB.save('activities', [newActivity, ...activities.slice(0, 99)]);
+  },
 };
