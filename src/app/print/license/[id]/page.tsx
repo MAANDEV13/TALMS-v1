@@ -3,18 +3,32 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { MOCK_DB } from '@/lib/mockDb';
-import { ShieldCheck, Building2, Download } from 'lucide-react';
 
 export default function PrintLicensePage() {
   const params = useParams();
   const id = params.id as string;
   const [app, setApp] = useState<any>(null);
 
+  // Generate dynamic dates
+  const now = new Date();
+  const oneYearLater = new Date();
+  oneYearLater.setFullYear(now.getFullYear() + 1);
+
+  const formatDate = (date: Date) => {
+    const d = date.getDate().toString().padStart(2, '0');
+    const m = (date.getMonth() + 1).toString().padStart(2, '0');
+    const y = date.getFullYear();
+    return `${d}/${m}/${y}`;
+  };
+
+  const todayDate = formatDate(now);
+  const expiryDate = formatDate(oneYearLater);
+
   useEffect(() => {
     const apps = MOCK_DB.get('applications');
     const defaults = [
-      { id: '1', agency: 'Hargeisa Sky Travels', type: 'New', status: 'Under Review', statusColor: 'amber', date: 'Oct 24, 2023' },
-      { id: '2', agency: 'Berbera Maritime Tours', type: 'Renewal', status: 'Approved by general_director', statusColor: 'green', date: 'Oct 23, 2023' },
+      { id: '1', agency: 'Hargeisa Sky Travels', type: 'New', status: 'Under Review', statusColor: 'amber', date: todayDate },
+      { id: '2', agency: 'Berbera Maritime Tours', type: 'Renewal', status: 'Approved by general_director', statusColor: 'green', date: todayDate },
     ];
     const found = [...apps, ...defaults].find(a => a.id === id);
     setApp(found);
@@ -22,108 +36,280 @@ export default function PrintLicensePage() {
     if (found) {
       setTimeout(() => {
         window.print();
-      }, 800);
+      }, 1000);
     }
-  }, [id]);
+  }, [id, todayDate]);
 
-  if (!app) return <div className="p-10 text-center">Loading License...</div>;
+  if (!app) return <div className="p-10 text-center">Loading Certificate...</div>;
+
+  const licenseId = `SL-STA-${app.id.toUpperCase()}`;
+  const qrData = encodeURIComponent(
+    `Ministry of Civil Aviation Somaliland\nAgency: ${app.agency}\nLicense ID: ${licenseId}\nIssue Date: ${todayDate}\nExpiry Date: ${expiryDate}\nStatus: VALID`
+  );
 
   return (
-    <div className="license-print-container">
+    <div className="certificate-wrapper">
       <style jsx global>{`
-        /* Reset for the standalone print page ONLY */
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
+
         html, body {
           margin: 0 !important;
           padding: 0 !important;
-          background: white !important;
-          width: 100% !important;
-          height: 100% !important;
-        }
-
-        .license-print-container {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          min-height: 100vh;
-          background: white;
+          background: #f1f5f9 !important;
+          font-family: 'Montserrat', sans-serif;
         }
 
         @media print {
           @page {
-            size: A4 portrait;
+            size: A4 landscape;
             margin: 0;
           }
-          .license-print-container {
-            display: block !important;
-            padding: 0 !important;
+          html, body {
+            background: white !important;
+          }
+          .certificate-container {
+            box-shadow: none !important;
             margin: 0 !important;
           }
         }
+
+        .certificate-wrapper {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          padding: 0;
+          min-height: 100vh;
+        }
+
+        .certificate-container {
+          width: 297mm;
+          height: 210mm;
+          padding: 5mm;
+          box-sizing: border-box;
+          background: white;
+          position: relative;
+        }
+
+        .outer-border {
+          border: 6px solid #1e40af;
+          width: 100%;
+          height: 100%;
+          padding: 2mm;
+          box-sizing: border-box;
+        }
+
+        .inner-border {
+          border: 1px solid #1e40af;
+          width: 100%;
+          height: 100%;
+          padding: 15mm 15mm 10mm 15mm;
+          box-sizing: border-box;
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+
+        .watermark {
+          position: absolute;
+          top: 55%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: 150mm;
+          opacity: 0.05;
+          z-index: 0;
+          pointer-events: none;
+        }
+
+        .content {
+          position: relative;
+          z-index: 1;
+          width: 100%;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+        }
+
+        .logo {
+          width: 55mm;
+          margin-bottom: 1mm;
+          margin-top: 0;
+        }
+
+        .ministry-name {
+          font-size: 13pt;
+          font-weight: 900;
+          color: #000;
+          margin-bottom: 5mm;
+          text-transform: uppercase;
+          line-height: 1.2;
+          max-width: 500px;
+        }
+
+        .certificate-title {
+          font-size: 22pt;
+          font-weight: 900;
+          color: #1e40af;
+          margin-bottom: 6mm;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          line-height: 1.1;
+        }
+
+        .auth-text {
+          font-size: 12.5pt;
+          color: #334155;
+          line-height: 1.5;
+          max-width: 85%;
+          margin-bottom: 7mm;
+          font-weight: 500;
+        }
+
+        .company-name {
+          font-size: 28pt;
+          font-weight: 900;
+          color: #0f172a;
+          margin-bottom: 7mm;
+          text-transform: uppercase;
+          border-bottom: 3px solid #f1f5f9;
+          display: inline-block;
+          padding: 0 30px 4px 30px;
+        }
+
+        .suspension-text {
+          font-size: 11pt;
+          color: #64748b;
+          line-height: 1.3;
+          max-width: 80%;
+          margin-bottom: auto;
+          font-style: italic;
+        }
+
+        .footer {
+          width: 100%;
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-end;
+          margin-top: auto;
+        }
+
+        .date-box {
+          text-align: left;
+          font-size: 11pt;
+          font-weight: 900;
+          color: #1e293b;
+          text-transform: uppercase;
+          min-width: 180px;
+          padding-bottom: 5mm;
+        }
+
+        .signature-box {
+          text-align: center;
+          min-width: 300px;
+          padding-bottom: 5mm;
+        }
+
+        .signature-line {
+          width: 100%;
+          height: 2px;
+          background: #1e40af;
+          margin-bottom: 2mm;
+        }
+
+        .dg-name {
+          font-size: 12pt;
+          font-weight: 900;
+          color: #0f172a;
+          text-transform: uppercase;
+        }
+
+        .dg-title {
+          font-size: 10pt;
+          font-weight: 800;
+          color: #1e40af;
+          text-transform: uppercase;
+        }
+
+        .qr-code-section {
+          position: absolute;
+          top: 0;
+          right: 0;
+          width: 32mm;
+          text-align: center;
+        }
+
+        .qr-image {
+          width: 100%;
+          height: auto;
+          background: #fff;
+          margin-bottom: 1mm;
+          padding: 1mm;
+          border: 1px solid #e2e8f0;
+        }
+
+        .ref-number {
+          font-size: 8.5pt;
+          color: #ef4444;
+          font-weight: 900;
+          text-transform: uppercase;
+        }
       `}</style>
 
-      <div className="license-certificate shadow-2xl border-slate-100 border p-16 print:p-10 print:shadow-none print:border-none w-[210mm] h-[297mm] relative overflow-hidden flex flex-col items-center bg-white">
-        {/* Background Watermark */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-[0.03] rotate-[-45deg] pointer-events-none">
-          <ShieldCheck className="w-[800px] h-[800px] text-blue-900" />
-        </div>
-        
-        <div className="relative z-10 w-full flex flex-col items-center text-center">
-          {/* Header */}
-          <div className="flex items-center gap-6 mb-12">
-            <Building2 className="w-24 h-24 text-blue-900" />
-            <div className="text-left border-l-4 border-blue-900 pl-6">
-              <h2 className="text-5xl font-black text-slate-900 tracking-tight leading-none">SOMALILAND</h2>
-              <p className="text-base font-bold text-blue-800 tracking-[0.3em] uppercase mt-2">Travel Authority Office</p>
+      <div className="certificate-container">
+        <div className="outer-border">
+          <div className="inner-border">
+            <img src="/logo.png" className="watermark" alt="" />
+            
+            <div className="qr-code-section">
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${qrData}`} 
+                className="qr-image" 
+                alt="Verification QR" 
+              />
+              <p className="ref-number">{licenseId}</p>
             </div>
-          </div>
-          
-          <div className="h-2 w-64 bg-blue-900 rounded-full mb-20"></div>
-          
-          <h1 className="text-7xl font-black text-slate-900 mb-8 tracking-tighter uppercase leading-none">Travel Agency License</h1>
-          <p className="text-2xl font-medium text-slate-500 mb-20 italic">This document certifies the official legal authorization of:</p>
-          
-          {/* Agency Details */}
-          <div className="bg-slate-50 border-4 border-double border-slate-200 p-16 rounded-[40px] mb-20 w-full max-w-3xl shadow-sm">
-            <h3 className="text-6xl font-black text-blue-900 mb-4">{app.agency}</h3>
-            <p className="text-2xl font-bold text-slate-500 uppercase tracking-[0.2em]">License ID: SL-STA-{app.id.toUpperCase()}</p>
-          </div>
-          
-          {/* Dates */}
-          <div className="grid grid-cols-2 gap-24 text-left w-full max-w-3xl mb-32">
-            <div className="space-y-2">
-              <p className="text-sm font-black text-slate-400 uppercase tracking-[0.3em]">Issue Date</p>
-              <p className="text-3xl font-black text-slate-900">{app.date}</p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-black text-slate-400 uppercase tracking-[0.3em]">Expiry Date</p>
-              <p className="text-3xl font-black text-slate-900">Oct 24, 2025</p>
-            </div>
-          </div>
-          
-          {/* Signatures & QR */}
-          <div className="w-full max-w-4xl flex items-end justify-between mt-12 px-10">
-            <div className="text-center">
-              <div className="w-56 h-1.5 bg-slate-200 mb-4"></div>
-              <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Digital Verification</p>
-              <div className="mt-6 w-28 h-28 bg-white rounded-2xl mx-auto flex items-center justify-center border-4 border-slate-50 shadow-sm">
-                <div className="w-20 h-20 border-8 border-slate-50 flex items-center justify-center">
-                  <Download className="w-10 h-10 text-slate-100" />
+
+            <div className="content">
+              <img src="/logo.png" className="logo" alt="Ministry Logo" />
+              <h2 className="ministry-name">
+                Ministry of Civil Aviation and <br /> Airport's Development
+              </h2>
+
+              <h1 className="certificate-title">Travel Agency Operating Certificate</h1>
+
+              <p className="auth-text">
+                This certificate authorizes the holder to operate as a licensed Travel Agency, providing approved travel and tourism services in accordance with the laws and regulations of the Republic of Somaliland and applicable International aviation standards.
+              </p>
+
+              <div className="company-wrapper">
+                <h2 className="company-name">{app.agency}</h2>
+              </div>
+
+              <p className="suspension-text">
+                This certificate is subject to periodic review and may be suspended or revoked in the event of noncompliance with the applicable laws and regulations.
+              </p>
+
+              <div className="footer">
+                <div className="date-box">
+                  <p>ISSUE DATE: {todayDate}</p>
+                </div>
+
+                <div className="signature-box">
+                  <p className="dg-name">Abdirashid Abdi Jama</p>
+                  <p className="dg-title">Approved by MOCAAD</p>
+                  <p className="dg-title">Director General</p>
+                  <div className="signature-line mt-4"></div>
+                </div>
+
+                <div className="date-box text-right">
+                  <p>EXPIRY DATE: {expiryDate}</p>
                 </div>
               </div>
             </div>
-            
-            <div className="text-center">
-              <div className="w-96 h-0.5 bg-slate-900 mb-6"></div>
-              <p className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Director General Signature</p>
-              <p className="text-sm font-bold text-blue-800 uppercase tracking-[0.3em] mt-2">Somaliland Republic</p>
-            </div>
           </div>
         </div>
-        
-        {/* Decorative Borders */}
-        <div className="absolute top-0 left-0 w-full h-8 bg-blue-900"></div>
-        <div className="absolute bottom-0 left-0 w-full h-8 bg-blue-900"></div>
-        <div className="absolute bottom-8 left-0 w-full h-1 bg-blue-400"></div>
       </div>
     </div>
   );

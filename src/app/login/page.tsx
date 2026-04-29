@@ -49,19 +49,26 @@ export default function LoginPage() {
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-900/40 rounded-full blur-3xl -ml-32 -mb-32"></div>
           
           <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-12">
-              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/20">
-                <FileText className="w-6 h-6 text-white" />
+            <div className="flex flex-col items-center text-center lg:items-start lg:text-left gap-6 mb-12">
+              <div className="bg-white/10 p-4 rounded-3xl backdrop-blur-sm border border-white/10 shadow-2xl">
+                <img src="/logo.png" alt="MOCAAD Logo" className="w-32 h-32 object-contain" />
               </div>
-              <h1 className="text-2xl font-bold tracking-tight text-white">TALMS</h1>
+              <div>
+                <h1 className="text-2xl font-black tracking-tight text-white leading-tight uppercase">
+                  Ministry of Civil Aviation <br /> & Airport's Development
+                </h1>
+                <p className="text-sm text-blue-400 mt-2 uppercase tracking-[0.3em] font-black opacity-80">
+                  Republic of Somaliland
+                </p>
+              </div>
             </div>
             
             <h2 className="text-4xl font-bold leading-tight mb-6 text-white">
-              Empowering Travel <br />
-              <span className="text-blue-400">Authority Excellence.</span>
+              Travel Agency <br />
+              <span className="text-blue-400">Operating Portal.</span>
             </h2>
             <p className="text-slate-400 text-lg max-w-sm leading-relaxed">
-              The official portal for Somaliland travel agency license registration, renewals, and compliance.
+              Official system for licensing, oversight, and aviation compliance management.
             </p>
           </div>
 
@@ -86,8 +93,8 @@ export default function LoginPage() {
             </div>
           </div>
           
-          <div className="relative z-10 pt-12 text-sm text-slate-500 font-medium">
-            © 2024 Travel Authority Somaliland.
+          <div className="relative z-10 pt-12 text-xs text-slate-500 font-bold uppercase tracking-widest">
+            © 2026 MOCAAD Somaliland.
           </div>
         </div>
 

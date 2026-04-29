@@ -54,14 +54,16 @@ export function Sidebar() {
 
   return (
     <aside className="w-64 h-screen bg-slate-900 text-white flex flex-col fixed left-0 top-0 z-50 transition-all duration-300">
-      <div className="p-6 border-b border-slate-800">
-        <h1 className="text-xl font-bold tracking-tight text-blue-400 flex items-center gap-2">
-          <FileText className="w-6 h-6" />
-          <span>TALMS</span>
-        </h1>
-        <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest font-semibold">
-          Travel Authority
-        </p>
+      <div className="p-6 border-b border-slate-800 flex flex-col items-center text-center gap-4">
+        <img src="/logo.png" alt="MOCAAD Logo" className="w-full h-auto max-h-32 object-contain px-2" />
+        <div className="w-full">
+          <h1 className="text-[13px] font-black tracking-tight text-white leading-tight uppercase">
+            Ministry of Civil Aviation <br /> & Airport's Development
+          </h1>
+          <p className="text-[10px] text-blue-400 mt-2 uppercase tracking-[0.2em] font-black">
+            Republic of Somaliland
+          </p>
+        </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
