@@ -8,6 +8,7 @@ export default function PrintLicensePage() {
   const params = useParams();
   const id = params.id as string;
   const [app, setApp] = useState<any>(null);
+  const [settings, setSettings] = useState<any>(null);
 
   // Generate dynamic dates
   const now = new Date();
@@ -32,6 +33,7 @@ export default function PrintLicensePage() {
     ];
     const found = [...apps, ...defaults].find(a => a.id === id);
     setApp(found);
+    setSettings(MOCK_DB.getSettings());
 
     if (found) {
       setTimeout(() => {
@@ -42,7 +44,7 @@ export default function PrintLicensePage() {
 
   if (!app) return <div className="p-10 text-center">Loading Certificate...</div>;
 
-  const licenseId = `${app.id.toString().padStart(3, '0')}-MOCAAD-DCA/2026`;
+  const licenseId = app.agencyId || `${app.id.toString().padStart(3, '0')}-MOCAAD-DCA/2026`;
   const qrData = encodeURIComponent(
     `Ministry of Civil Aviation Somaliland\nAgency: ${app.agency}\nLicense ID: ${licenseId}\nIssue Date: ${todayDate}\nExpiry Date: ${expiryDate}\nStatus: VALID`
   );
@@ -223,9 +225,10 @@ export default function PrintLicensePage() {
 
         .signature-line {
           width: 100%;
-          height: 2px;
-          background: #1e40af;
+          border-bottom: 2px solid #1e40af;
           margin-bottom: 2mm;
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
         }
 
         .dg-name {
@@ -290,7 +293,7 @@ export default function PrintLicensePage() {
               <h1 className="certificate-title">Travel Agency Operating Certificate</h1>
 
               <p className="auth-text">
-                This certificate authorizes the holder to operate as a licensed Travel Agency, providing approved travel and tourism services in accordance with the laws and regulations of the Republic of Somaliland and applicable International aviation standards.
+                {settings?.certAuthText || "This certificate authorizes the holder to operate as a licensed Travel Agency, providing approved travel and tourism services in accordance with the laws and regulations of the Republic of Somaliland and applicable International aviation standards."}
               </p>
 
               <div className="company-wrapper">
@@ -298,7 +301,7 @@ export default function PrintLicensePage() {
               </div>
 
               <p className="suspension-text">
-                This certificate is subject to periodic review and may be suspended or revoked in the event of noncompliance with the applicable laws and regulations.
+                {settings?.certSuspensionText || "This certificate is subject to periodic review and may be suspended or revoked in the event of noncompliance with the applicable laws and regulations."}
               </p>
 
               <div className="footer">

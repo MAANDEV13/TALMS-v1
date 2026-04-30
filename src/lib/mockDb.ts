@@ -34,6 +34,16 @@ export const MOCK_DB = {
     if (!localStorage.getItem('talms_activities')) {
       localStorage.setItem('talms_activities', JSON.stringify([]));
     }
+
+    if (!localStorage.getItem('talms_settings')) {
+      localStorage.setItem('talms_settings', JSON.stringify({
+        registrationFee: 1000,
+        renewalFee: 600,
+        applicationFee: 500,
+        certAuthText: "This certificate authorizes the holder to operate as a licensed Travel Agency, providing approved travel and tourism services in accordance with the laws and regulations of the Republic of Somaliland and applicable International aviation standards.",
+        certSuspensionText: "This certificate is subject to periodic review and may be suspended or revoked in the event of noncompliance with the applicable laws and regulations."
+      }));
+    }
   },
 
   // Generic Get/Set
@@ -43,20 +53,41 @@ export const MOCK_DB = {
   // Specific Operations
   addApplication: (app: any) => {
     const apps = MOCK_DB.get('applications');
+    
+    // Final safety check for New applications to prevent duplicates by name
+    if (app.type === 'New') {
+      const exists = apps.some((a: any) => a.agency.toLowerCase() === app.agency.toLowerCase());
+      if (exists) {
+        console.warn('Duplicate application attempt blocked for:', app.agency);
+        return false;
+      }
+    }
+    
     MOCK_DB.save('applications', [app, ...apps]);
+    return true;
   },
 
   getNextLicenseId: () => {
     const agencies = MOCK_DB.get('agencies');
+    const apps = MOCK_DB.get('applications').filter((a: any) => a.status !== 'Draft');
     const year = new Date().getFullYear();
-    const nextNumber = (agencies.length + 1).toString().padStart(3, '0');
-    return `SL-${year}-${nextNumber}`;
+    const nextNumber = (agencies.length + apps.length + 1).toString().padStart(3, '0');
+    return `${nextNumber}-MOCAAD-DCA/${year}`;
   },
 
-  updateApplicationStatus: (id: string, status: string, color: string) => {
+  getDraftId: () => {
+    return `DRAFT-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+  },
+
+  updateApplicationStatus: (id: string, status: string, color: string, comment?: string) => {
     const apps = MOCK_DB.get('applications');
     const updated = apps.map((app: any) => 
-      app.id === id ? { ...app, status, statusColor: color } : app
+      app.id === id ? { 
+        ...app, 
+        status, 
+        statusColor: color,
+        reviewComment: comment || app.reviewComment 
+      } : app
     );
     MOCK_DB.save('applications', updated);
   },
@@ -117,5 +148,48 @@ export const MOCK_DB = {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     MOCK_DB.save('activities', [newActivity, ...activities.slice(0, 99)]);
+  },
+
+  getSettings: () => {
+    const settings = localStorage.getItem('talms_settings');
+    return settings ? JSON.parse(settings) : {
+      registrationFee: 1000,
+      renewalFee: 600,
+      applicationFee: 500,
+      certAuthText: "This certificate authorizes the holder to operate as a licensed Travel Agency, providing approved travel and tourism services in accordance with the laws and regulations of the Republic of Somaliland and applicable International aviation standards.",
+      certSuspensionText: "This certificate is subject to periodic review and may be suspended or revoked in the event of noncompliance with the applicable laws and regulations."
+    };
+  },
+
+  updateSettings: (newSettings: any) => {
+    const current = MOCK_DB.getSettings();
+    localStorage.setItem('talms_settings', JSON.stringify({ ...current, ...newSettings }));
+  },
+
+  updateApplication: (updatedApp: any) => {
+    const apps = MOCK_DB.get('applications');
+    const updated = apps.map((app: any) => 
+      app.id === updatedApp.id ? updatedApp : app
+    );
+    MOCK_DB.save('applications', updated);
+  },
+
+  // Wipe all data and re-seed only system users
+  clearAndSeedUsers: () => {
+    if (typeof window === 'undefined') return;
+    const SEED_USERS = [
+      { id: '1', name: 'Admin User',    email: 'admin@agency.gov',    password: 'admin123', role: 'admin',            status: 'Active' },
+      { id: '2', name: 'Ahmed Officer', email: 'officer@agency.gov',  password: 'admin123', role: 'officer',          status: 'Active' },
+      { id: '3', name: 'Sarah Director',email: 'director@agency.gov', password: 'admin123', role: 'director',         status: 'Active' },
+      { id: '4', name: 'Guleid General',email: 'gd@agency.gov',       password: 'admin123', role: 'general_director', status: 'Active' },
+    ];
+    // Clear every collection
+    ['agencies','applications','notifications','agency_changes','activities','fines'].forEach(
+      (key) => localStorage.removeItem(`talms_${key}`)
+    );
+    // Re-seed users only
+    localStorage.setItem('talms_users', JSON.stringify(SEED_USERS));
+    // Keep settings untouched
+    console.info('[TALMS] Database cleared. Only seed users remain.');
   },
 };

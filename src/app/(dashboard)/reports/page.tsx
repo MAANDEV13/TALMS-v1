@@ -23,26 +23,37 @@ export default function ReportsPage() {
   const [stats, setStats] = useState<any>(null);
   const [revenue, setRevenue] = useState(0);
 
+  const [regionalDensity, setRegionalDensity] = useState<any[]>([]);
+
   useEffect(() => {
     MOCK_DB.init();
     const agencies = MOCK_DB.get('agencies');
     const apps = MOCK_DB.get('applications');
     const fines = MOCK_DB.get('fines') || [];
 
-    // Calculate revenue (Mock: $500 per approved license + fines)
+    // Calculate revenue
     const fineRevenue = fines.reduce((acc: number, f: any) => acc + (parseFloat(f.amount) || 0), 0);
-    const licenseRevenue = apps.filter((a: any) => a.status === 'Approved').length * 500;
+    const licenseRevenue = apps.filter((a: any) => a.status === 'Approved by General Director').length * 500;
 
     setStats({
       totalAgencies: agencies.length,
       activeAgencies: agencies.filter((a: any) => a.status === 'Active').length,
       expiredAgencies: agencies.filter((a: any) => a.status === 'Expired').length,
-      pendingApps: apps.filter((a: any) => a.status === 'Under Review').length,
+      pendingApps: apps.filter((a: any) => a.status.includes('Review')).length,
       newApps: apps.filter((a: any) => a.type === 'New').length,
       renewalApps: apps.filter((a: any) => a.type === 'Renewal').length,
       totalFines: fines.length,
     });
     setRevenue(licenseRevenue + fineRevenue);
+
+    // Calculate regional density
+    const regions = ['Maroodi Jeex', 'Togdheer', 'Awdal', 'Sahil', 'Sool', 'Sanaag'];
+    const density = regions.map(r => ({
+      region: r,
+      count: agencies.filter((a: any) => a.region === r).length,
+      color: r === 'Maroodi Jeex' ? 'blue' : r === 'Togdheer' ? 'indigo' : 'slate'
+    }));
+    setRegionalDensity(density);
   }, []);
 
   if (!stats) return <div className="p-20 text-center">Loading Ministerial Reports...</div>;
@@ -129,14 +140,7 @@ export default function ReportsPage() {
             <PieChartIcon className="w-5 h-5 text-slate-300" />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            {[
-              { region: 'Maroodi Jeex', count: 45, color: 'blue' },
-              { region: 'Togdheer', count: 18, color: 'indigo' },
-              { region: 'Awdal', count: 12, color: 'violet' },
-              { region: 'Sahil', count: 15, color: 'cyan' },
-              { region: 'Sool', count: 6, color: 'emerald' },
-              { region: 'Sanaag', count: 4, color: 'amber' },
-            ].map((r, i) => (
+            {regionalDensity.map((r, i) => (
               <div key={i} className="p-4 bg-slate-50 rounded-2xl flex items-center justify-between border border-transparent hover:border-slate-200 transition-all">
                 <span className="text-xs font-black text-slate-600 uppercase tracking-widest">{r.region}</span>
                 <span className={`text-sm font-black text-${r.color}-600`}>{r.count}</span>
@@ -146,9 +150,9 @@ export default function ReportsPage() {
           <div className="mt-8 pt-8 border-t border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase">
               <Users className="w-4 h-4" />
-              Top Region: Maroodi Jeex
+              Primary Focus: Maroodi Jeex
             </div>
-            <button className="text-xs font-black text-blue-600 uppercase tracking-widest hover:underline">View Detailed Map</button>
+            <button className="text-xs font-black text-blue-600 uppercase tracking-widest hover:underline">View Map View</button>
           </div>
         </div>
       </div>

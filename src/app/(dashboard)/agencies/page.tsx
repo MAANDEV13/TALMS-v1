@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { MOCK_DB } from '@/lib/mockDb';
 import { useAuth } from '@/context/AuthContext';
+import Link from 'next/link';
 
 export default function AgenciesPage() {
   const { user } = useAuth();
@@ -88,22 +89,35 @@ export default function AgenciesPage() {
                 <div className="space-y-2">
                   {editingAgency.docs.map((doc: string, i: number) => (
                     <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <span className="text-sm font-medium text-slate-700">{doc}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                          <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <span className="text-sm font-bold text-slate-700">{doc}</span>
+                      </div>
                       <button 
-                        onClick={() => setEditingAgency({...editingAgency, docs: editingAgency.docs.filter((d: string) => d !== doc)})}
-                        className="text-red-500 hover:bg-red-50 p-1 rounded"
+                        onClick={() => {
+                          const newDoc = prompt('Enter replacement document name:', doc);
+                          if (newDoc) {
+                            const newDocs = [...editingAgency.docs];
+                            newDocs[i] = newDoc;
+                            setEditingAgency({...editingAgency, docs: newDocs});
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-white border border-slate-200 text-blue-600 text-[10px] font-black uppercase rounded-lg hover:bg-blue-50 transition-all flex items-center gap-1.5"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Edit2 className="w-3 h-3" />
+                        Change File
                       </button>
                     </div>
                   ))}
                 </div>
                 <button 
                   onClick={() => {
-                    const newDoc = prompt('Enter document name:');
+                    const newDoc = prompt('Enter new document name:');
                     if (newDoc) setEditingAgency({...editingAgency, docs: [...editingAgency.docs, newDoc]});
                   }}
-                  className="w-full py-2 border-2 border-dashed border-slate-200 text-slate-500 text-sm font-bold rounded-xl hover:border-blue-400 hover:text-blue-600 transition-all"
+                  className="w-full py-3 border-2 border-dashed border-slate-200 text-slate-500 text-sm font-bold rounded-xl hover:border-blue-400 hover:text-blue-600 transition-all bg-slate-50/50"
                 >
                   + Add New Document Placeholder
                 </button>
@@ -175,7 +189,14 @@ export default function AgenciesPage() {
                       {agency.licenseId}
                     </span>
                   </td>
-                  <td className="px-6 py-4 font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{agency.name}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shrink-0 shadow-sm">
+                        <span className="text-sm font-black text-white uppercase">{agency.name[0]}</span>
+                      </div>
+                      <span className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{agency.name}</span>
+                    </div>
+                  </td>
                   <td className="px-6 py-4 text-sm text-slate-600">{agency.city}</td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
@@ -200,9 +221,13 @@ export default function AgenciesPage() {
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
-                    <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
+                    <Link 
+                      href={`/agencies/${agency.id}`}
+                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                      title="View Full Profile"
+                    >
                       <ExternalLink className="w-4 h-4" />
-                    </button>
+                    </Link>
                   </td>
                 </tr>
               ))}

@@ -50,6 +50,7 @@ export default function FinesPage() {
 
     const currentFines = MOCK_DB.get('fines') || [];
     MOCK_DB.save('fines', [newFine, ...currentFines]);
+    MOCK_DB.logActivity(user?.name || 'Director', 'Issued a fine to', selectedAgency.name);
     
     setFines([newFine, ...fines]);
     setSelectedAgency(null);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { 
   Building2, 
   MapPin, 
@@ -12,17 +12,28 @@ import {
   AlertCircle,
   Loader2,
   ArrowRight,
-  History
+  History,
+  DollarSign,
+  UserPlus,
+  Camera,
+  ImageIcon,
+  User
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { MOCK_DB } from '@/lib/mockDb';
+import { useAuth } from '@/context/AuthContext';
+import { useEffect } from 'react';
 
-export default function NewApplicationPage() {
+function NewApplicationPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const draftId = searchParams.get('id');
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nameChecked, setNameChecked] = useState(false);
+  const [settings, setSettings] = useState<any>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [existingAgencies, setExistingAgencies] = useState<any[]>([]);
   const [selectedAgency, setSelectedAgency] = useState<any>(null);
@@ -36,6 +47,78 @@ export default function NewApplicationPage() {
   const [region, setRegion] = useState('');
   const [district, setDistrict] = useState('');
   const [contactPerson, setContactPerson] = useState('');
+  
+  // New Personnel fields
+  const [secondName, setSecondName] = useState('');
+  const [secondPhone, setSecondPhone] = useState('');
+  const [secondEmail, setSecondEmail] = useState('');
+  const [altName, setAltName] = useState('');
+  const [altPhone, setAltPhone] = useState('');
+
+  // Financial fields
+  const [regFee, setRegFee] = useState(0);
+  const [appFee, setAppFee] = useState(0);
+  const [discount, setDiscount] = useState(0);
+  const [feePaid, setFeePaid] = useState(0);
+  const [uploadedDocs, setUploadedDocs] = useState<string[]>([]);
+  const [docFileNames, setDocFileNames] = useState<Record<string, string>>({});
+  const [agencyLogoPreview, setAgencyLogoPreview] = useState<string | null>(null);
+  const [ownerPhotoPreview, setOwnerPhotoPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 1. Role protection
+    if (user && user.role !== 'officer') {
+      router.push('/dashboard');
+      return;
+    }
+
+    // 2. Load settings & Sync Fees
+    const s = MOCK_DB.getSettings();
+    setSettings(s);
+    setRegFee(type === 'renewal' ? (s.renewalFee || 600) : (s.registrationFee || 1000));
+    setAppFee(s.applicationFee || 500);
+
+    // 3. Load draft if ID exists (First Priority)
+    if (draftId) {
+      const apps = MOCK_DB.get('applications');
+      const draft = apps.find((a: any) => a.id === draftId);
+      if (draft) {
+        setAgencyName(draft.agency);
+        setType(draft.type.toLowerCase());
+        setRegion(draft.region);
+        setDistrict(draft.district);
+        setSecondName(draft.contactPerson);
+        setSecondPhone(draft.phone);
+        setSecondEmail(draft.email || '');
+        if (draft.alternatePerson) {
+          setAltName(draft.alternatePerson.name);
+          setAltPhone(draft.alternatePerson.phone);
+        }
+        if (draft.financials) {
+          setRegFee(draft.financials.registrationFee);
+          setAppFee(draft.financials.applicationFee);
+          setDiscount(draft.financials.discount);
+          setFeePaid(draft.financials.paidAmount);
+        }
+        setSelectionMade(true);
+        setNameChecked(true);
+      }
+    }
+
+    // 4. Auto-fill for Renewal (Second Priority)
+    if (type === 'renewal' && selectedAgency && !draftId) {
+      setAgencyName(selectedAgency.name);
+      setRegion(selectedAgency.region || '');
+      setDistrict(selectedAgency.city || '');
+      setSecondName(selectedAgency.contactPerson || '');
+      setSecondPhone(selectedAgency.phone || '');
+      setSecondEmail(selectedAgency.email || '');
+      if (selectedAgency.alternatePerson) {
+        setAltName(selectedAgency.alternatePerson.name || '');
+        setAltPhone(selectedAgency.alternatePerson.phone || '');
+      }
+    }
+  }, [user, router, draftId, type, selectedAgency]);
 
   const somalilandRegions = [
     'Maroodi Jeex',
@@ -101,10 +184,49 @@ export default function NewApplicationPage() {
     return false;
   };
 
+  const handleSaveDraft = () => {
+    const generatedId = MOCK_DB.getDraftId();
+    const newApp = {
+      id: draftId || Math.random().toString(36).substr(2, 9),
+      agency: agencyName || "Untitled Draft",
+      agencyId: draftId ? (MOCK_DB.get('applications').find((a: any) => a.id === draftId)?.agencyId || generatedId) : generatedId,
+      region: region,
+      district: district,
+      contactPerson: secondName,
+      phone: secondPhone,
+      email: secondEmail,
+      alternatePerson: {
+        name: altName,
+        phone: altPhone
+      },
+      registerDate: new Date().toISOString().split('T')[0],
+      type: type === 'new' ? 'New' : 'Renewal',
+      status: 'Draft',
+      statusColor: 'amber',
+      financials: {
+        registrationFee: regFee,
+        applicationFee: appFee,
+        discount: discount,
+        paidAmount: feePaid,
+        totalDue: (regFee + appFee) - discount
+      },
+      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    };
+
+    if (draftId) {
+      MOCK_DB.updateApplication(newApp);
+    } else {
+      MOCK_DB.addApplication(newApp);
+      MOCK_DB.logActivity(user?.name || 'Officer', `Submitted ${newApp.type} application for`, agencyName);
+    }
+    router.push('/licenses');
+  };
+
   const [selectionMade, setSelectionMade] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
 
     if (currentStep === 1) {
       if (type === 'new') {
@@ -126,6 +248,11 @@ export default function NewApplicationPage() {
     }
 
     if (currentStep === 2) {
+      setCurrentStep(3);
+      return;
+    }
+
+    if (currentStep === 3) {
       if (type === 'new' && !MOCK_DB.checkAgencyName(agencyName)) {
         setNameError('Agency name is already registered or has a pending application.');
         setCurrentStep(1);
@@ -134,37 +261,7 @@ export default function NewApplicationPage() {
 
       setIsSubmitting(true);
 
-      setTimeout(() => {
-        const year = new Date().getFullYear();
-        const generatedId = MOCK_DB.getNextLicenseId();
-
-        const newApp = {
-          id: Math.random().toString(36).substr(2, 9),
-          agency: agencyName,
-          agencyId: selectedAgency?.licenseId || generatedId,
-          region: region,
-          district: district,
-          contactPerson: contactPerson,
-          phone: phone,
-          registerDate: new Date().toISOString().split('T')[0],
-          type: type === 'new' ? 'New' : 'Renewal',
-          status: 'Under Review',
-          statusColor: 'amber',
-          date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-        };
-
-        MOCK_DB.addApplication(newApp);
-        setIsSubmitting(false);
-        router.push('/licenses');
-      }, 1500);
-    }
-
-    setIsSubmitting(true);
-
-    setTimeout(() => {
-      const appsCount = MOCK_DB.get('applications').length + 1;
-      const year = new Date().getFullYear();
-      const generatedId = `${appsCount.toString().padStart(3, '0')}-MOCAAD-DCA/${year}`;
+      const generatedId = MOCK_DB.getNextLicenseId();
 
       const newApp = {
         id: Math.random().toString(36).substr(2, 9),
@@ -172,21 +269,43 @@ export default function NewApplicationPage() {
         agencyId: selectedAgency?.licenseId || generatedId,
         region: region,
         district: district,
-        contactPerson: contactPerson,
-        phone: phone,
+        contactPerson: secondName,
+        phone: secondPhone,
+        email: secondEmail,
+        alternatePerson: {
+          name: altName,
+          phone: altPhone
+        },
         registerDate: new Date().toISOString().split('T')[0],
         type: type === 'new' ? 'New' : 'Renewal',
         status: 'Under Review',
         statusColor: 'amber',
+        financials: {
+          registrationFee: regFee,
+          applicationFee: appFee,
+          discount: discount,
+          paidAmount: feePaid,
+          totalDue: (regFee + appFee) - discount
+        },
+        uploadedDocs: uploadedDocs,
+        docFileNames: docFileNames,
         date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       };
 
-      const existing = JSON.parse(localStorage.getItem('talms_applications') || '[]');
-      localStorage.setItem('talms_applications', JSON.stringify([newApp, ...existing]));
+      const success = MOCK_DB.addApplication(newApp);
+      
+      if (!success) {
+        setNameError('A submission for this agency name is already in progress.');
+        setCurrentStep(1);
+        setIsSubmitting(false);
+        return;
+      }
 
-      setIsSubmitting(false);
-      router.push('/licenses');
-    }, 1500);
+      setTimeout(() => {
+        setIsSubmitting(false);
+        router.push('/licenses');
+      }, 1500);
+    }
   };
 
   if (!selectionMade) {
@@ -268,6 +387,7 @@ export default function NewApplicationPage() {
         {[
           { step: 1, label: type === 'new' ? 'Identity Check' : 'Find Agency' },
           { step: 2, label: 'Documents' },
+          { step: 3, label: 'Financials' },
         ].map((s, idx) => (
           <div key={idx} className="relative z-10 flex flex-col items-center gap-2">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-all duration-300 ${
@@ -397,7 +517,7 @@ export default function NewApplicationPage() {
                   </div>
                 )}
               </div>
-              
+
               {type === 'new' && (
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-slate-700">Business Structure</label>
@@ -428,38 +548,6 @@ export default function NewApplicationPage() {
                 </div>
               )}
 
-              {type === 'new' && (
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">Contact Email</label>
-                  <input 
-                    type="email" 
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-slate-900"
-                    placeholder="contact@hargeisatravel.com"
-                    required
-                  />
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Phone Number</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm border-r border-slate-200 pr-3">+252</span>
-                  <input 
-                    type="tel" 
-                    value={phone}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '').slice(0, 9);
-                      setPhone(val);
-                    }}
-                    className="w-full pl-20 pr-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-slate-900"
-                    placeholder="63 XXXXXXX"
-                    required
-                  />
-                </div>
-              </div>
-
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-slate-700">Region</label>
                 <select 
@@ -486,17 +574,111 @@ export default function NewApplicationPage() {
                 </select>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Contact Person</label>
-                <input 
-                  type="text" 
-                  value={contactPerson}
-                  onChange={(e) => setContactPerson(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-slate-900"
-                  placeholder="Full name of contact person"
-                  required
-                />
+              {/* Contact Person Section */}
+              <div className="col-span-full pt-4 border-t border-slate-100">
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2 mb-4">
+                  <UserPlus className="w-4 h-4 text-blue-600" />
+                  Contact Person
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">Full Name</label>
+                    <input 
+                      type="text" 
+                      value={secondName}
+                      onChange={(e) => setSecondName(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">Phone</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm border-r border-slate-200 pr-3">+252</span>
+                      <input 
+                        type="tel" 
+                        value={secondPhone}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '').slice(0, 9);
+                          setSecondPhone(val);
+                        }}
+                        className="w-full pl-20 pr-4 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="63 XXXXXXX"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">Email <span className="text-xs text-slate-400 font-normal">(Optional)</span></label>
+                    <input 
+                      type="email" 
+                      value={secondEmail}
+                      onChange={(e) => setSecondEmail(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Email"
+                    />
+                  </div>
+                </div>
               </div>
+
+              {/* Alternate Person Section */}
+              <div className="col-span-full pt-4 border-t border-slate-100">
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2 mb-4">
+                  <History className="w-4 h-4 text-amber-600" />
+                  Alternate Person
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">Full Name</label>
+                    <input 
+                      type="text" 
+                      value={altName}
+                      onChange={(e) => setAltName(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Alternate Name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-slate-700">Phone</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm border-r border-slate-200 pr-3">+252</span>
+                      <input 
+                        type="tel" 
+                        value={altPhone}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '').slice(0, 9);
+                          setAltPhone(val);
+                        }}
+                        className="w-full pl-20 pr-4 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="63 XXXXXXX"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Step 1 Navigation */}
+            <div className="flex items-center justify-between mt-8">
+              <button 
+                type="button"
+                onClick={handleSaveDraft}
+                className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+              >
+                Save as Draft
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(2)}
+                disabled={!nameChecked || !!nameError}
+                className={`px-10 py-3 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex items-center gap-2 ${
+                  nameChecked && !nameError
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20'
+                    : 'bg-blue-600/50 text-white cursor-not-allowed'
+                }`}
+              >
+                Next Step
+                <ArrowRight className="w-5 h-5" />
+              </button>
             </div>
           </div>
         )}
@@ -507,11 +689,71 @@ export default function NewApplicationPage() {
               <FileUp className="w-5 h-5 text-blue-600" />
               Required Documentation
             </h2>
+
+            {/* Agency Identity - Logo + Owner Passport Photo */}
+            <div className="mb-8 p-6 bg-slate-50 rounded-2xl border border-slate-100">
+              <h3 className="text-sm font-black text-slate-700 uppercase tracking-tight flex items-center gap-2 mb-6">
+                <ImageIcon className="w-4 h-4 text-blue-600" />
+                Agency Identity Photos
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Agency Logo */}
+                <div className="flex flex-col items-center gap-4">
+                  <p className="text-xs font-bold text-slate-600 uppercase tracking-widest self-start">Agency Logo</p>
+                  <div className="relative">
+                    {agencyLogoPreview ? (
+                      <img src={agencyLogoPreview} alt="Agency Logo" className="w-28 h-28 rounded-2xl object-cover border-4 border-white shadow-xl" />
+                    ) : (
+                      <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center border-4 border-white shadow-xl">
+                        <span className="text-4xl font-black text-white uppercase">{agencyName ? agencyName[0] : '?'}</span>
+                      </div>
+                    )}
+                    <input type="file" id="logo-upload" className="hidden" accept="image/*" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 5 * 1024 * 1024) { alert('Logo must be under 5MB'); return; }
+                      setAgencyLogoPreview(URL.createObjectURL(file));
+                      e.target.value = '';
+                    }} />
+                    <label htmlFor="logo-upload" className="absolute -bottom-2 -right-2 w-9 h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center justify-center cursor-pointer shadow-lg transition-all">
+                      <Camera className="w-4 h-4" />
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Click camera to upload · Max 5MB</p>
+                </div>
+                {/* Owner Passport Photo */}
+                <div className="flex flex-col items-center gap-4">
+                  <p className="text-xs font-bold text-slate-600 uppercase tracking-widest self-start">Owner Passport Photo</p>
+                  <div className="relative">
+                    {ownerPhotoPreview ? (
+                      <img src={ownerPhotoPreview} alt="Owner Photo" className="w-28 h-28 rounded-2xl object-cover border-4 border-white shadow-xl" />
+                    ) : (
+                      <div className="w-28 h-28 rounded-2xl bg-slate-100 border-4 border-white shadow-xl flex flex-col items-center justify-center gap-1">
+                        <User className="w-10 h-10 text-slate-300" />
+                        <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">No Photo</span>
+                      </div>
+                    )}
+                    <input type="file" id="owner-photo-upload" className="hidden" accept="image/*" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 5 * 1024 * 1024) { alert('Photo must be under 5MB'); return; }
+                      setOwnerPhotoPreview(URL.createObjectURL(file));
+                      e.target.value = '';
+                    }} />
+                    <label htmlFor="owner-photo-upload" className="absolute -bottom-2 -right-2 w-9 h-9 bg-slate-700 hover:bg-slate-900 text-white rounded-xl flex items-center justify-center cursor-pointer shadow-lg transition-all">
+                      <Camera className="w-4 h-4" />
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Passport-size · JPG/PNG · Max 5MB</p>
+                </div>
+              </div>
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {(() => {
                 const requiredDocs = [
                   'Application Letter (MOCAAD Format)',
+                  'Passport Photo of Owner/Manager',
                   'National ID (Staff & Management)',
                   'Company Profile (Vision/Mission)',
                   'Memorandum & Articles of Association',
@@ -527,51 +769,232 @@ export default function NewApplicationPage() {
                   requiredDocs.splice(6, 0, 'Shareholders Copy (Notarized)');
                 }
 
-                return requiredDocs.map((doc, i) => (
-                  <div key={i} className="p-5 rounded-xl border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer group flex items-center gap-4 text-left">
-                    <div className="w-10 h-10 shrink-0 rounded-full bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center transition-colors">
-                      <FileUp className="w-5 h-5 text-slate-400 group-hover:text-blue-600" />
+                return requiredDocs.map((doc, i) => {
+                  const isUploaded = uploadedDocs.includes(doc);
+                  const uploadedFileName = docFileNames[doc];
+                  const inputId = `doc-upload-${i}`;
+                  return (
+                    <div 
+                      key={i} 
+                      className={`p-5 rounded-2xl border-2 transition-all group flex items-center gap-4 text-left ${
+                        isUploaded 
+                          ? 'border-green-200 bg-green-50/30' 
+                          : 'border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50/30'
+                      }`}
+                    >
+                      <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center transition-all ${
+                        isUploaded ? 'bg-green-100' : 'bg-slate-100 group-hover:bg-blue-100'
+                      }`}>
+                        {isUploaded ? (
+                          <CheckCircle2 className="w-6 h-6 text-green-600" />
+                        ) : (
+                          <FileUp className="w-6 h-6 text-slate-400 group-hover:text-blue-600" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-black leading-tight truncate ${isUploaded ? 'text-green-900' : 'text-slate-900'}`}>{doc}</p>
+                        {uploadedFileName ? (
+                          <p className="text-[10px] mt-1 font-bold text-green-600 truncate">{uploadedFileName}</p>
+                        ) : (
+                          <p className="text-[10px] mt-1 font-bold uppercase tracking-widest text-slate-400">PDF/Image · Max 5MB</p>
+                        )}
+                      </div>
+                      {/* Hidden file input */}
+                      <input
+                        type="file"
+                        id={inputId}
+                        className="hidden"
+                        accept=".pdf,.jpg,.jpeg,.png,.webp"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 5 * 1024 * 1024) {
+                            alert(`"${file.name}" exceeds the 5 MB limit. Please compress the file before uploading.`);
+                            e.target.value = '';
+                            return;
+                          }
+                          const action = isUploaded ? 'Replaced' : 'Uploaded';
+                          setUploadedDocs((prev) => prev.includes(doc) ? prev : [...prev, doc]);
+                          setDocFileNames((prev) => ({ ...prev, [doc]: file.name }));
+                          MOCK_DB.logActivity(user?.name || 'Officer', `${action} document: ${doc} (${file.name})`, agencyName || 'New Application');
+                          e.target.value = '';
+                        }}
+                      />
+                      <label
+                        htmlFor={inputId}
+                        className={`shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer ${
+                          isUploaded 
+                            ? 'bg-white border border-green-200 text-green-700 hover:bg-green-600 hover:text-white' 
+                            : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm shadow-blue-600/20'
+                        }`}
+                      >
+                        {isUploaded ? 'Replace' : 'Upload'}
+                      </label>
                     </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-bold text-slate-900">{doc}</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">PDF/Image required</p>
-                    </div>
-                    <div className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold text-slate-500 uppercase">
-                      Upload
-                    </div>
-                  </div>
-                ));
+                  );
+                });
               })()}
             </div>
-            <div className="flex items-center justify-between pt-4">
-              <button
+            <div className="flex items-center justify-between pt-8 border-t border-slate-100 mt-8">
+              <button 
                 type="button"
-                disabled={currentStep === 1 || isSubmitting}
-                onClick={() => setCurrentStep(currentStep - 1)}
-                className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl disabled:opacity-50 transition-all"
+                onClick={handleSaveDraft}
+                className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
               >
-                Back
+                Save as Draft
               </button>
-              
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className={`px-8 py-2.5 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex items-center gap-2 ${
-                  currentStep < 2 
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20' 
-                    : 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/20'
-                }`}
-              >
-                {isSubmitting ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  currentStep < 2 ? 'Next Step' : 'Complete Submission'
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(1)}
+                  className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                >
+                  Back to Identity
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(3)}
+                  className="px-8 py-2.5 rounded-xl font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-2"
+                >
+                  Next Step
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {currentStep === 3 && (
+          <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-green-600" />
+              Financial Requirements
+            </h2>
+
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">
+                    {type === 'renewal' ? 'Renewal Fee ($)' : 'Registration Fee ($)'}
+                  </label>
+                  <div className="px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 font-black text-slate-600">
+                    {regFee}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">Application Fee ($)</label>
+                  <div className="px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 font-black text-slate-600">
+                    {appFee}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">Discount Applied ($)</label>
+                  <input 
+                    type="number" 
+                    value={discount}
+                    onChange={(e) => setDiscount(Number(e.target.value))}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-red-600"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">Amount Already Paid ($)</label>
+                  <input 
+                    type="number" 
+                    value={feePaid}
+                    onChange={(e) => setFeePaid(Number(e.target.value))}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-green-600"
+                  />
+                </div>
+              </div>
+
+              <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-500">Subtotal</span>
+                  <span className="font-bold text-slate-900">${regFee + appFee}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-500">Discount</span>
+                  <span className="font-bold text-red-600">-${discount}</span>
+                </div>
+                <div className="pt-4 border-t border-slate-200 flex justify-between items-center">
+                  <div className="space-y-0.5">
+                    <span className="text-slate-900 font-black uppercase tracking-widest text-xs">Final Total Due</span>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">Payable to MOCAAD Revenue Account</p>
+                  </div>
+                  <span className="text-3xl font-black text-blue-600">
+                    ${(regFee + appFee) - discount}
+                  </span>
+                </div>
+                
+                {feePaid > 0 && (
+                  <div className="pt-4 border-t border-dashed border-slate-200 flex justify-between items-center">
+                    <span className="text-slate-600 font-bold text-sm italic">Balance Remaining</span>
+                    <span className="text-lg font-black text-slate-900">
+                      ${Math.max(0, (regFee + appFee - discount) - feePaid)}
+                    </span>
+                  </div>
                 )}
+              </div>
+
+              <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex gap-3">
+                <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                <p className="text-xs font-medium text-blue-800 leading-relaxed">
+                  Please verify all financial data before submission. These fees will be reviewed by the Department Director and General Director.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-8 border-t border-slate-100 mt-8">
+              <button 
+                type="button"
+                onClick={handleSaveDraft}
+                className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+              >
+                Save as Draft
               </button>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(2)}
+                  className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                >
+                  Back to Documents
+                </button>
+                
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-10 py-2.5 rounded-xl font-bold bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 transition-all active:scale-95 flex items-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-5 h-5" />
+                      Complete & Submit
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
       </form>
     </div>
+  );
+}
+
+export default function NewApplicationPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="flex items-center gap-3 text-slate-500">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span className="font-medium">Loading application form...</span>
+        </div>
+      </div>
+    }>
+      <NewApplicationPageContent />
+    </Suspense>
   );
 }

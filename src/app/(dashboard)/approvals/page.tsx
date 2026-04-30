@@ -14,7 +14,11 @@ import {
   MessageSquare,
   ShieldCheck,
   Edit3,
-  Printer
+  Printer,
+  DollarSign,
+  Save,
+  FileText,
+  Eye
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { MOCK_DB } from '@/lib/mockDb';
@@ -27,31 +31,69 @@ export default function ApprovalsPage() {
   const [selectedApp, setSelectedApp] = useState<any>(null);
   const [selectedChange, setSelectedChange] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [reviewComment, setReviewComment] = useState('');
+  const [docTab, setDocTab] = useState<'details' | 'documents'>('details');
 
   useEffect(() => {
     MOCK_DB.init();
-    setApprovals(MOCK_DB.get('applications'));
+    // Never show drafts in the approval workflow
+    setApprovals(MOCK_DB.get('applications').filter((app: any) => app.status !== 'Draft'));
     setAgencyChanges(MOCK_DB.get('agency_changes'));
   }, []);
 
   const handleAction = (status: string, color: string) => {
     if (!selectedApp) return;
     
-    MOCK_DB.updateApplicationStatus(selectedApp.id, status, color);
+    MOCK_DB.updateApplicationStatus(selectedApp.id, status, color, reviewComment);
+    MOCK_DB.logActivity(user?.name || 'Reviewer', `Updated status to: ${status} for`, selectedApp.agency);
+    
+    // Create actual agency record if approved by GD
+    if (status === 'Approved by General Director') {
+      const agencies = MOCK_DB.get('agencies');
+      const exists = agencies.some((a: any) => a.licenseId === selectedApp.agencyId || a.name.toLowerCase() === selectedApp.agency.toLowerCase());
+      
+      if (!exists) {
+        const newAgency = {
+          id: Math.random().toString(36).substr(2, 9),
+          licenseId: selectedApp.agencyId,
+          name: selectedApp.agency,
+          city: selectedApp.district,
+          region: selectedApp.region,
+          status: 'Active',
+          contactPerson: selectedApp.contactPerson,
+          phone: selectedApp.phone,
+          email: selectedApp.email,
+          createdAt: new Date().toISOString()
+        };
+        MOCK_DB.save('agencies', [newAgency, ...agencies]);
+      }
+    }
+
     setApprovals(MOCK_DB.get('applications'));
     setSelectedApp(null);
     setIsEditing(false);
   };
 
+  const handleUpdateFinancials = () => {
+    if (!selectedApp) return;
+    MOCK_DB.updateApplication(selectedApp);
+    setApprovals(MOCK_DB.get('applications'));
+    setMessage("Financial records updated successfully.");
+    setTimeout(() => setMessage(null), 3000);
+  };
+
+  const [message, setMessage] = useState<string | null>(null);
+
   const handleApproveChange = () => {
     if (!selectedChange) return;
     MOCK_DB.approveAgencyChange(selectedChange.id);
+    MOCK_DB.logActivity(user?.name || 'Admin', `Approved data change for`, selectedChange.agencyId);
     setAgencyChanges(MOCK_DB.get('agency_changes'));
     setSelectedChange(null);
   };
 
   const isAlreadyReviewed = (app: any) => {
-    return app.status.includes('Approved') || app.status === 'Needs Revision';
+    return app.status === 'Approved by General Director' || app.status === 'Needs Revision';
   };
 
   return (
@@ -61,6 +103,11 @@ export default function ApprovalsPage() {
           <h1 className="text-3xl font-bold text-slate-900">Approval Workflow</h1>
           <p className="text-slate-500 mt-1">Review and process actions awaiting your authority.</p>
         </div>
+        {message && (
+          <div className="bg-green-100 text-green-700 px-4 py-2 rounded-xl font-bold text-sm animate-in fade-in slide-in-from-top-2">
+            {message}
+          </div>
+        )}
         {user?.role === 'general_director' && (
           <div className="flex bg-white border border-slate-200 rounded-2xl p-1 shadow-sm">
             <button 
@@ -308,6 +355,33 @@ export default function ApprovalsPage() {
                 <XCircle className="w-6 h-6 text-slate-400" />
               </button>
             </div>
+            {/* Tab switcher for GD */}
+            {user?.role === 'general_director' && (
+              <div className="px-8 pt-6 pb-0 flex gap-1 bg-slate-50 border-b border-slate-100">
+                <button
+                  onClick={() => setDocTab('details')}
+                  className={`px-5 py-2.5 text-xs font-black uppercase tracking-widest rounded-t-xl transition-all ${
+                    docTab === 'details' ? 'bg-white text-blue-600 border border-b-white border-slate-200 -mb-px' : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  Application Details
+                </button>
+                <button
+                  onClick={() => setDocTab('documents')}
+                  className={`px-5 py-2.5 text-xs font-black uppercase tracking-widest rounded-t-xl transition-all flex items-center gap-2 ${
+                    docTab === 'documents' ? 'bg-white text-blue-600 border border-b-white border-slate-200 -mb-px' : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  Documents
+                  {selectedApp?.uploadedDocs?.length > 0 && (
+                    <span className="w-4 h-4 bg-blue-600 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                      {selectedApp.uploadedDocs.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
             
             <div className="flex-1 overflow-y-auto p-8 space-y-8">
               {isAlreadyReviewed(selectedApp) && !isEditing ? (
@@ -359,6 +433,8 @@ export default function ApprovalsPage() {
                       Reviewer Comments
                     </h4>
                     <textarea 
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
                       className="w-full p-4 border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all text-slate-900 font-medium"
                       rows={4}
                       placeholder="Enter your assessment or feedback for the agency..."
@@ -367,18 +443,164 @@ export default function ApprovalsPage() {
                 </>
               )}
 
-              <section className="space-y-4">
-                <h4 className="font-bold text-slate-900">Verified Documents</h4>
-                <div className="space-y-3">
-                  {['Business License', 'Tax Clearance'].map((doc, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
-                      <span className="text-sm font-medium text-slate-700">{doc}</span>
-                      <button className="text-xs font-bold text-blue-600">View File</button>
+                {/* Financials Section */}
+                <section className="space-y-4 pt-4 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                      <DollarSign className="w-5 h-5 text-green-600" />
+                      Financial Assessment
+                    </h4>
+                    {(user?.role === 'director' || user?.role === 'general_director') && selectedApp.status !== 'Approved' && (
+                      <button 
+                        onClick={handleUpdateFinancials}
+                        className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:bg-blue-50 px-2 py-1 rounded"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        Save Changes
+                      </button>
+                    )}
+                  </div>
+                  
+                  {selectedApp.financials ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">Registration Fee</p>
+                          <p className="font-bold text-slate-900 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">${selectedApp.financials.registrationFee}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">Application Fee</p>
+                          <p className="font-bold text-slate-900 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">${selectedApp.financials.applicationFee}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">Discount</p>
+                          {(user?.role === 'director' || user?.role === 'general_director') && selectedApp.status !== 'Approved' ? (
+                            <input 
+                              type="number"
+                              value={selectedApp.financials.discount}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                const newApp = { ...selectedApp, financials: { ...selectedApp.financials, discount: val, totalDue: (selectedApp.financials.registrationFee + selectedApp.financials.applicationFee) - val } };
+                                setSelectedApp(newApp);
+                              }}
+                              className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm text-red-600"
+                            />
+                          ) : (
+                            <p className="font-bold text-red-600">-${selectedApp.financials.discount}</p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">Paid Amount</p>
+                          {(user?.role === 'director' || user?.role === 'general_director') && selectedApp.status !== 'Approved' ? (
+                            <input 
+                              type="number"
+                              value={selectedApp.financials.paidAmount}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                const newApp = { ...selectedApp, financials: { ...selectedApp.financials, paidAmount: val } };
+                                setSelectedApp(newApp);
+                              }}
+                              className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm text-green-600"
+                            />
+                          ) : (
+                            <p className="font-bold text-green-600">${selectedApp.financials.paidAmount}</p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 bg-slate-900 rounded-2xl flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Payable</p>
+                          <p className="text-xl font-black text-white">${selectedApp.financials.totalDue}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Balance</p>
+                          <p className="text-lg font-bold text-blue-400">${Math.max(0, selectedApp.financials.totalDue - selectedApp.financials.paidAmount)}</p>
+                        </div>
+                      </div>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600" />
+                      <p className="text-xs text-amber-800 font-medium">No financial records found for this legacy application.</p>
+                    </div>
+                  )}
+                </section>
+
+              {/* Documents Section - always visible to all roles, full panel for GD */}
+              {(user?.role !== 'general_director' || docTab === 'details') && (
+                <section className="space-y-4">
+                  <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                    Submitted Documents
+                    <span className="text-xs font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                      {selectedApp.uploadedDocs?.length ?? 0} files
+                    </span>
+                  </h4>
+                  <div className="space-y-2">
+                    {selectedApp.uploadedDocs && selectedApp.uploadedDocs.length > 0 ? (
+                      selectedApp.uploadedDocs.map((doc: string, i: number) => (
+                        <div key={i} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:border-blue-100 hover:bg-blue-50/30 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                              <FileText className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-slate-800">{doc}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase">{selectedApp.docFileNames?.[doc] || 'File on record'}</p>
+                            </div>
+                          </div>
+                          <span className="text-[9px] font-black bg-green-100 text-green-700 px-2 py-0.5 rounded-full border border-green-200 uppercase">Submitted</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl flex items-center gap-3">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <p className="text-xs text-amber-800 font-medium">No documents were recorded for this application.</p>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {/* Full Documents Tab for GD */}
+              {user?.role === 'general_director' && docTab === 'documents' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-slate-900 uppercase tracking-tight">Document Checklist</h4>
+                    <span className="text-xs font-bold text-slate-400">{selectedApp.uploadedDocs?.length ?? 0} / 10 submitted</span>
+                  </div>
+                  {selectedApp.uploadedDocs && selectedApp.uploadedDocs.length > 0 ? (
+                    selectedApp.uploadedDocs.map((doc: string, i: number) => (
+                      <div key={i} className="p-5 rounded-2xl border-2 border-slate-100 bg-white hover:border-blue-200 transition-all flex items-center gap-4 shadow-sm">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+                          <FileText className="w-6 h-6 text-blue-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-black text-slate-900 leading-tight">{doc}</p>
+                          <p className="text-[10px] mt-1 font-bold text-slate-400 truncate">
+                            {selectedApp.docFileNames?.[doc] || 'Document on record'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-black bg-green-100 text-green-700 px-2 py-1 rounded-lg border border-green-200 uppercase">Verified</span>
+                          <button className="w-8 h-8 bg-slate-100 hover:bg-blue-600 text-slate-400 hover:text-white rounded-lg flex items-center justify-center transition-all" title="View Document">
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-16 text-center space-y-3">
+                      <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto border border-slate-100">
+                        <FileText className="w-8 h-8 text-slate-200" />
+                      </div>
+                      <p className="text-slate-400 font-bold text-sm">No documents were uploaded for this application.</p>
+                    </div>
+                  )}
                 </div>
-              </section>
-            </div>
+              )}
+            </div>{/* end scrollable body */}
 
             <div className="p-8 border-t border-slate-100 grid grid-cols-2 gap-4 bg-white">
               {(!isAlreadyReviewed(selectedApp) || isEditing) ? (
@@ -400,7 +622,7 @@ export default function ApprovalsPage() {
                       } else if (user?.role === 'director') {
                         nextStatus = 'Under Review - Director General';
                       } else if (user?.role === 'general_director') {
-                        nextStatus = 'Approved';
+                        nextStatus = 'Approved by General Director';
                         nextColor = 'green';
                       }
                       
@@ -415,12 +637,23 @@ export default function ApprovalsPage() {
                   </button>
                 </>
               ) : (
-                <button 
-                  onClick={() => setSelectedApp(null)}
-                  className="col-span-2 py-3.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all"
-                >
-                  Close Summary
-                </button>
+                <div className="col-span-2 flex gap-3">
+                  {user?.role === 'director' && selectedApp.status === 'Approved by General Director' && (
+                    <button 
+                      onClick={() => window.open(`/print/license/${selectedApp.id}`, '_blank', 'width=900,height=1200')}
+                      className="flex-1 py-3.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Printer className="w-5 h-5" />
+                      Print License
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => setSelectedApp(null)}
+                    className="flex-1 py-3.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all"
+                  >
+                    Close Summary
+                  </button>
+                </div>
               )}
             </div>
           </div>

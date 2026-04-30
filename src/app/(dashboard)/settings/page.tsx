@@ -9,9 +9,12 @@ import {
   Globe, 
   CreditCard,
   ChevronRight,
-  LogOut
+  LogOut,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { MOCK_DB } from '@/lib/mockDb';
+import { useEffect, useState } from 'react';
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -33,6 +36,24 @@ export default function SettingsPage() {
       ]
     }
   ];
+
+  const [settings, setSettings] = useState<any>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSettings(MOCK_DB.getSettings());
+  }, []);
+
+  const handleSaveSettings = () => {
+    setIsSaving(true);
+    MOCK_DB.updateSettings(settings);
+    setTimeout(() => {
+      setIsSaving(false);
+      setMessage('Settings updated successfully!');
+      setTimeout(() => setMessage(null), 3000);
+    }, 1000);
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-12">
@@ -87,7 +108,126 @@ export default function SettingsPage() {
           ))}
         </div>
 
-        <div className="p-8 bg-red-50/30 border-t border-slate-100">
+        {/* Admin Settings Section */}
+        {user?.role === 'admin' && settings && (
+          <div className="p-8 space-y-8 border-t border-slate-100 bg-slate-50/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Global System Configuration</h3>
+                <p className="text-xs text-slate-500 font-medium">Administrator only access to financial and legal content.</p>
+              </div>
+              <button 
+                onClick={handleSaveSettings}
+                disabled={isSaving}
+                className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+
+            {message && (
+              <div className="p-4 bg-green-100 border border-green-200 text-green-700 rounded-xl font-bold text-sm animate-in fade-in slide-in-from-top-2">
+                {message}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Financial Settings */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-blue-600" />
+                  Financial Fees
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-tighter">New Registration ($)</label>
+                    <input 
+                      type="number" 
+                      value={settings.registrationFee}
+                      onChange={(e) => setSettings({...settings, registrationFee: parseInt(e.target.value)})}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-blue-600"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-tighter">Renewal Fee ($)</label>
+                    <input 
+                      type="number" 
+                      value={settings.renewalFee || 0}
+                      onChange={(e) => setSettings({...settings, renewalFee: parseInt(e.target.value)})}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-amber-600"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-tighter">Application Fee ($)</label>
+                    <input 
+                      type="number" 
+                      value={settings.applicationFee}
+                      onChange={(e) => setSettings({...settings, applicationFee: parseInt(e.target.value)})}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-600"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Certificate Content */}
+              <div className="space-y-4 col-span-full">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-purple-600" />
+                  Certificate Content (Legal)
+                </h4>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-600">Authorization Text</label>
+                    <textarea 
+                      value={settings.certAuthText}
+                      onChange={(e) => setSettings({...settings, certAuthText: e.target.value})}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm min-h-[100px] leading-relaxed"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-600">Suspension/Revocation Notice</label>
+                    <textarea 
+                      value={settings.certSuspensionText}
+                      onChange={(e) => setSettings({...settings, certSuspensionText: e.target.value})}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm min-h-[80px] leading-relaxed"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Danger Zone - Admin only */}
+        {user?.role === 'admin' && (
+          <div className="p-8 bg-red-50/40 border-t-2 border-red-100 space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-black text-red-800 uppercase tracking-widest flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  Danger Zone
+                </h3>
+                <p className="text-xs text-red-600/70 font-medium mt-1">
+                  Reset all data to factory defaults. Only the 4 system users will remain. This cannot be undone.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (confirm('⚠️ WARNING\n\nThis will permanently delete ALL agencies, applications, activities, fines, and change requests.\n\nOnly the 4 seed users will be kept.\n\nType OK to confirm.')) {
+                    MOCK_DB.clearAndSeedUsers();
+                    window.location.reload();
+                  }
+                }}
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all active:scale-95 shadow-lg shadow-red-600/20 flex items-center gap-2 shrink-0"
+              >
+                <Trash2 className="w-4 h-4" />
+                Reset Database
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="p-8 bg-slate-50/30 border-t border-slate-100">
           <button className="flex items-center gap-2 text-red-600 font-bold hover:underline">
             <LogOut className="w-4 h-4" />
             Sign out from all devices

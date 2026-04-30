@@ -11,44 +11,47 @@ import {
 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import Link from 'next/link';
+import { MOCK_DB } from '@/lib/mockDb';
+import { useAuth } from '@/context/AuthContext';
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [stats, setStats] = useState({
-    total: 1284,
-    pending: 42,
-    approved: 18,
-    expiring: 12
+    total: 0,
+    pending: 0,
+    approved: 0,
+    expiring: 0
   });
 
   const [recentApps, setRecentApps] = useState<any[]>([]);
+  const [recentLogs, setRecentLogs] = useState<any[]>([]);
 
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem('talms_applications') || '[]');
-    const defaults = [
-      { name: 'Hargeisa Sky Travels', type: 'New', status: 'Under Review', statusColor: 'amber', date: 'Oct 24, 2023' },
-      { name: 'Berbera Maritime Tours', type: 'Renewal', status: 'Approved', statusColor: 'green', date: 'Oct 23, 2023' },
-      { name: 'Borama International', type: 'New', status: 'Needs Revision', statusColor: 'red', date: 'Oct 22, 2023' },
-    ];
-    
-    // Map saved to match the display structure
-    const formattedSaved = saved.map((app: any) => ({
+    MOCK_DB.init();
+    const apps = MOCK_DB.get('applications');
+    const agencies = MOCK_DB.get('agencies');
+    const logs = MOCK_DB.get('activities');
+
+    // Calculate real stats
+    setStats({
+      total: agencies.length,
+      pending: apps.filter((a: any) => a.status.includes('Review')).length,
+      approved: apps.filter((a: any) => a.status === 'Approved by General Director').length,
+      expiring: agencies.filter((a: any) => a.status === 'Expired').length
+    });
+
+    // Format applications
+    const formattedApps = apps.slice(0, 6).map((app: any) => ({
       name: app.agency,
       type: app.type,
       status: app.status,
       statusColor: app.statusColor,
       date: app.date
     }));
+    setRecentApps(formattedApps);
 
-    setRecentApps([...formattedSaved, ...defaults]);
-    
-    // Update stats slightly based on new apps
-    if (saved.length > 0) {
-      setStats(prev => ({
-        ...prev,
-        total: prev.total + saved.length,
-        pending: prev.pending + saved.length
-      }));
-    }
+    // Get logs
+    setRecentLogs(logs.slice(0, 4));
   }, []);
 
   return (
@@ -139,32 +142,31 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
-          <h2 className="text-lg font-bold text-slate-900">Somaliland Activity</h2>
-          <div className="space-y-6 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
-            {[
-              { user: 'Ahmed Salan', action: 'approved application in', target: 'Hargeisa', time: '2 mins ago', color: 'green' },
-              { user: 'Mustafa Guleid', action: 'flagged review for', target: 'Berbera Agency', time: '1 hour ago', color: 'amber' },
-              { user: 'Admin User', action: 'updated license rules for', target: 'Borama', time: '3 hours ago', color: 'blue' },
-              { user: 'General Director', action: 'finalized approval for', target: 'Burao Co.', time: '5 hours ago', color: 'purple' },
-            ].map((activity, i) => (
-              <div key={i} className="relative pl-8 group">
-                <div className={`absolute left-0 top-1 w-4 h-4 rounded-full border-4 border-white shadow-sm ring-1 ${
-                  activity.color === 'green' ? 'bg-green-500 ring-green-100' :
-                  activity.color === 'amber' ? 'bg-amber-500 ring-amber-100' :
-                  activity.color === 'blue' ? 'bg-blue-500 ring-blue-100' : 'bg-purple-500 ring-purple-100'
-                }`}></div>
-                <p className="text-sm text-slate-600 leading-snug">
-                  <span className="font-bold text-slate-900">{activity.user}</span> {activity.action} <span className="font-semibold text-blue-600">{activity.target}</span>
-                </p>
-                <p className="text-xs text-slate-400 mt-1">{activity.time}</p>
-              </div>
-            ))}
+        {user?.role === 'admin' && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+            <h2 className="text-lg font-bold text-slate-900">System Activity</h2>
+            <div className="space-y-6 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
+              {recentLogs.length > 0 ? recentLogs.map((activity, i) => (
+                <div key={i} className="relative pl-8 group">
+                  <div className={`absolute left-0 top-1 w-4 h-4 rounded-full border-4 border-white shadow-sm ring-1 ${
+                    activity.action.includes('Approved') ? 'bg-green-500 ring-green-100' :
+                    activity.action.includes('Issue') ? 'bg-red-500 ring-red-100' :
+                    'bg-blue-500 ring-blue-100'
+                  }`}></div>
+                  <p className="text-sm text-slate-600 leading-snug">
+                    <span className="font-bold text-slate-900">{activity.user}</span> {activity.action} <span className="font-semibold text-blue-600">{activity.target}</span>
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">{activity.time} • {activity.date}</p>
+                </div>
+              )) : (
+                <p className="text-center text-slate-400 text-sm py-10 font-medium italic">No recent activity found.</p>
+              )}
+            </div>
+            <Link href="/activities" className="block w-full py-2.5 text-center text-sm font-semibold text-slate-500 bg-slate-50 hover:bg-slate-100 hover:text-slate-700 rounded-xl transition-all">
+              View All Audit Logs
+            </Link>
           </div>
-          <button className="w-full py-2.5 text-sm font-semibold text-slate-500 bg-slate-50 hover:bg-slate-100 hover:text-slate-700 rounded-xl transition-all">
-            View Regional Reports
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );

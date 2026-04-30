@@ -9,6 +9,9 @@ import {
   Clock, 
   CheckCircle2, 
   Printer,
+  ChevronRight,
+  MessageSquare,
+  AlertCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { MOCK_DB } from '@/lib/mockDb';
@@ -19,18 +22,23 @@ export default function LicensesPage() {
   const [applications, setApplications] = useState<any[]>([]);
 
   useEffect(() => {
-    const saved = MOCK_DB.get('applications');
+    let saved = MOCK_DB.get('applications');
+    // Hide drafts from non-officers
+    if (user?.role !== 'officer') {
+      saved = saved.filter((app: any) => app.status !== 'Draft');
+    }
     setApplications(saved);
-  }, []);
+  }, [user]);
 
   const canPrint = (app: any) => {
-    const isOfficer = user?.role === 'officer';
-    const isFinalApproved = app.status === 'Approved by general_director' || app.status === 'Approved';
-    return isOfficer && isFinalApproved;
+    const isDirector = user?.role === 'director';
+    const isApproved = app.status === 'Approved' || app.status.includes('Approved');
+    return isDirector && isApproved;
   };
 
+  const [viewingApp, setViewingApp] = useState<any>(null);
+
   const handlePrint = (id: string) => {
-    // Open the dedicated print page in a new window
     window.open(`/print/license/${id}`, '_blank', 'width=900,height=1200');
   };
 
@@ -41,13 +49,15 @@ export default function LicensesPage() {
           <h1 className="text-3xl font-bold text-slate-900">License Applications</h1>
           <p className="text-slate-500 mt-1">Manage and track travel agency license applications in Somaliland.</p>
         </div>
-        <Link 
-          href="/licenses/new"
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-blue-600/20 transition-all active:scale-95"
-        >
-          <Plus className="w-5 h-5" />
-          <span>New Application</span>
-        </Link>
+        {user?.role === 'officer' && (
+          <Link 
+            href="/licenses/new"
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-blue-600/20 transition-all active:scale-95"
+          >
+            <Plus className="w-5 h-5" />
+            <span>New Application</span>
+          </Link>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -93,28 +103,42 @@ export default function LicensesPage() {
                   <td className="px-6 py-4 text-sm text-slate-600">{app.phone ? `+252 ${app.phone}` : '-'}</td>
                   <td className="px-6 py-4 text-sm text-slate-600">{app.registerDate || '-'}</td>
                   <td className="px-6 py-4 text-sm text-slate-600">{app.type}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                      app.statusColor === 'amber' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                      app.statusColor === 'green' ? 'bg-green-50 text-green-700 border-green-100' :
-                      app.statusColor === 'blue' ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-red-50 text-red-700 border-red-100'
-                    }`}>
-                      {app.status.replace('_', ' ')}
-                    </span>
-                  </td>
+                    <td className="px-6 py-4 text-sm font-bold">
+                      {app.status === 'Draft' && user?.role === 'officer' ? (
+                        <Link 
+                          href={`/licenses/new?id=${app.id}`}
+                          className="flex items-center gap-1.5 text-amber-600 hover:text-amber-700 hover:underline"
+                        >
+                          Continue Draft
+                          <ChevronRight className="w-4 h-4" />
+                        </Link>
+                      ) : (
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                          app.statusColor === 'amber' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                          app.statusColor === 'green' ? 'bg-green-50 text-green-700 border-green-100' :
+                          app.statusColor === 'blue' ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-red-50 text-red-700 border-red-100'
+                        }`}>
+                          {app.status.replace('_', ' ')}
+                        </span>
+                      )}
+                    </td>
                   <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setViewingApp(app); }}
+                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                      title="View Details"
+                    >
+                      <ArrowRight className="w-5 h-5" />
+                    </button>
                     {canPrint(app) && (
                       <button 
                         onClick={(e) => { e.stopPropagation(); handlePrint(app.id); }}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all flex items-center gap-2 text-xs font-bold border border-blue-100"
                       >
                         <Printer className="w-4 h-4" />
-                        Print License
+                        Print
                       </button>
                     )}
-                    <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
-                      <ArrowRight className="w-5 h-5" />
-                    </button>
                   </td>
                 </tr>
               )) : (
@@ -128,6 +152,78 @@ export default function LicensesPage() {
           </table>
         </div>
       </div>
+
+      {/* Detail Modal for Officer */}
+      {viewingApp && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-900">Application Status</h2>
+              <button onClick={() => setViewingApp(null)} className="text-slate-400 hover:text-slate-600">
+                <ChevronRight className="w-6 h-6 rotate-90" />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6">
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    viewingApp.statusColor === 'green' ? 'bg-green-100 text-green-600' : 
+                    viewingApp.statusColor === 'amber' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'
+                  }`}>
+                    <Clock className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase">Current Status</p>
+                    <p className="text-sm font-black text-slate-900 capitalize">{viewingApp.status.replace('_', ' ')}</p>
+                  </div>
+                </div>
+              </div>
+
+              {viewingApp.reviewComment && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-blue-600" />
+                    Reviewer Notes
+                  </h4>
+                  <div className="p-5 bg-blue-50 border border-blue-100 rounded-2xl">
+                    <p className="text-sm text-blue-900 font-medium italic leading-relaxed">
+                      "{viewingApp.reviewComment}"
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {!viewingApp.reviewComment && (
+                <div className="p-5 bg-slate-50 border border-slate-100 rounded-2xl flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-slate-400 shrink-0" />
+                  <p className="text-xs text-slate-500 font-medium">No reviewer comments have been added yet for this application.</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Agency ID</p>
+                  <p className="text-sm font-bold text-slate-900">{viewingApp.agencyId || 'Pending'}</p>
+                </div>
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Type</p>
+                  <p className="text-sm font-bold text-slate-900">{viewingApp.type}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100">
+              <button 
+                onClick={() => setViewingApp(null)}
+                className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transition-all"
+              >
+                Close View
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
