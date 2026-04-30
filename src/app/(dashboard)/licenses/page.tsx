@@ -20,11 +20,7 @@ export default function LicensesPage() {
 
   useEffect(() => {
     const saved = MOCK_DB.get('applications');
-    const defaults = [
-      { id: '1', agency: 'Hargeisa Sky Travels', type: 'New', status: 'Under Review', statusColor: 'amber', date: 'Oct 24, 2023' },
-      { id: '2', agency: 'Berbera Maritime Tours', type: 'Renewal', status: 'Approved by general_director', statusColor: 'green', date: 'Oct 23, 2023' },
-    ];
-    setApplications([...saved, ...defaults]);
+    setApplications(saved);
   }, []);
 
   const canPrint = (app: any) => {
@@ -72,6 +68,11 @@ export default function LicensesPage() {
               <tr className="border-b border-slate-100">
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Agency ID</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Agency Name</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Region</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">District</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Contact Person</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Phone</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Register Date</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Action</th>
@@ -86,6 +87,11 @@ export default function LicensesPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{app.agency}</td>
+                  <td className="px-6 py-4 text-sm text-slate-600">{app.region || '-'}</td>
+                  <td className="px-6 py-4 text-sm text-slate-600">{app.district || '-'}</td>
+                  <td className="px-6 py-4 text-sm text-slate-600">{app.contactPerson || '-'}</td>
+                  <td className="px-6 py-4 text-sm text-slate-600">{app.phone ? `+252 ${app.phone}` : '-'}</td>
+                  <td className="px-6 py-4 text-sm text-slate-600">{app.registerDate || '-'}</td>
                   <td className="px-6 py-4 text-sm text-slate-600">{app.type}</td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${

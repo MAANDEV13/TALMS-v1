@@ -20,7 +20,6 @@ import { MOCK_DB } from '@/lib/mockDb';
 
 export default function NewApplicationPage() {
   const router = useRouter();
-  const [branches, setBranches] = useState([{ id: 1, name: '', address: '', city: 'Hargeisa' }]);
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nameChecked, setNameChecked] = useState(false);
@@ -34,34 +33,41 @@ export default function NewApplicationPage() {
   const [businessType, setBusinessType] = useState<'solo' | 'partnership'>('solo');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [region, setRegion] = useState('');
+  const [district, setDistrict] = useState('');
+  const [contactPerson, setContactPerson] = useState('');
 
-  const somalilandCities = [
-    'Hargeisa', 
-    'Borama', 
-    'Berbera', 
-    'Burao', 
-    'Erigavo', 
-    'Las Anod', 
-    'Gabiley', 
-    'Wajaale', 
-    'Sheikh', 
-    'Aynabo', 
-    'Kalabaydh', 
-    'Arabsiyo'
+  const somalilandRegions = [
+    'Maroodi Jeex',
+    'Awdal',
+    'Sool',
+    'Togdheer',
+    'Sanaag',
+    'Sahil'
   ];
 
-  const addBranch = () => {
-    setBranches([...branches, { id: Date.now(), name: '', address: '', city: 'Hargeisa' }]);
-  };
+  const somalilandDistricts = [
+    'Hargeisa',
+    'Borama',
+    'Berbera',
+    'Burao',
+    'Erigavo',
+    'Las Anod',
+    'Gabiley',
+    'Wajaale',
+    'Sheikh',
+    'Aynabo',
+    'Kalabaydh',
+    'Arabsiyo',
+    'Buuhoodle',
+    'Caynaba',
+    'Ceerigaabo',
+    'Laasqoray',
+    'Xudun'
+  ];
 
-  const removeBranch = (id: number) => {
-    if (branches.length > 1) {
-      setBranches(branches.filter(b => b.id !== id));
-    }
-  };
-
-  const handleNameCheck = () => {
-    if (!agencyName) return;
+  const handleNameCheck = (): boolean => {
+    if (!agencyName) return false;
     
     // For renewal, we just search for matching agencies
     if (type === 'renewal') {
@@ -74,11 +80,12 @@ export default function NewApplicationPage() {
       if (matches.length > 0) {
         setNameChecked(true);
         setNameError(null);
+        return true;
       } else {
         setNameError("No matching agencies found. Please check the name or License ID.");
         setNameChecked(false);
+        return false;
       }
-      return;
     }
 
     // For new, we check if it DOES NOT exist
@@ -86,40 +93,70 @@ export default function NewApplicationPage() {
     if (isAvailable) {
       setNameChecked(true);
       setNameError(null);
-    } else {
-      setNameError("Agency name is already registered or has a pending application.");
+      return true;
     }
+
+    setNameError("Agency name is already registered or has a pending application.");
+    setNameChecked(false);
+    return false;
   };
 
   const [selectionMade, setSelectionMade] = useState(false);
 
-  const handleNext = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!selectionMade) return;
-    if (!nameChecked && type === 'new') {
-      handleNameCheck();
-      return;
-    }
-    if (type === 'renewal' && !selectedAgency) {
-      setNameError("Please select an agency from the list first.");
-      return;
-    }
-    if (type === 'renewal' && currentStep === 1) {
-      setCurrentStep(3); // Skip branches for renewal
-      return;
-    }
-    if (currentStep < 3) {
-      setCurrentStep(currentStep + 1);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // If we are not on the last step yet, just move to the next step
-    if (currentStep < 3) {
-      setCurrentStep(currentStep + 1);
+
+    if (currentStep === 1) {
+      if (type === 'new') {
+        const validated = handleNameCheck();
+        if (!validated) {
+          return;
+        }
+      }
+
+      if (type === 'renewal') {
+        if (!selectedAgency) {
+          setNameError('Please select an agency from the list first.');
+          return;
+        }
+      }
+
+      setCurrentStep(2);
       return;
+    }
+
+    if (currentStep === 2) {
+      if (type === 'new' && !MOCK_DB.checkAgencyName(agencyName)) {
+        setNameError('Agency name is already registered or has a pending application.');
+        setCurrentStep(1);
+        return;
+      }
+
+      setIsSubmitting(true);
+
+      setTimeout(() => {
+        const year = new Date().getFullYear();
+        const generatedId = MOCK_DB.getNextLicenseId();
+
+        const newApp = {
+          id: Math.random().toString(36).substr(2, 9),
+          agency: agencyName,
+          agencyId: selectedAgency?.licenseId || generatedId,
+          region: region,
+          district: district,
+          contactPerson: contactPerson,
+          phone: phone,
+          registerDate: new Date().toISOString().split('T')[0],
+          type: type === 'new' ? 'New' : 'Renewal',
+          status: 'Under Review',
+          statusColor: 'amber',
+          date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        };
+
+        MOCK_DB.addApplication(newApp);
+        setIsSubmitting(false);
+        router.push('/licenses');
+      }, 1500);
     }
 
     setIsSubmitting(true);
@@ -133,6 +170,11 @@ export default function NewApplicationPage() {
         id: Math.random().toString(36).substr(2, 9),
         agency: agencyName,
         agencyId: selectedAgency?.licenseId || generatedId,
+        region: region,
+        district: district,
+        contactPerson: contactPerson,
+        phone: phone,
+        registerDate: new Date().toISOString().split('T')[0],
         type: type === 'new' ? 'New' : 'Renewal',
         status: 'Under Review',
         statusColor: 'amber',
@@ -225,8 +267,7 @@ export default function NewApplicationPage() {
       <div className="flex items-center justify-between px-12 relative before:absolute before:left-12 before:right-12 before:top-5 before:h-0.5 before:bg-slate-200">
         {[
           { step: 1, label: type === 'new' ? 'Identity Check' : 'Find Agency' },
-          ...(type === 'new' ? [{ step: 2, label: 'Branches' }] : []),
-          { step: 3, label: 'Documents' },
+          { step: 2, label: 'Documents' },
         ].map((s, idx) => (
           <div key={idx} className="relative z-10 flex flex-col items-center gap-2">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-all duration-300 ${
@@ -418,73 +459,49 @@ export default function NewApplicationPage() {
                   />
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">Region</label>
+                <select 
+                  value={region}
+                  onChange={(e) => setRegion(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-slate-900 appearance-none"
+                  required
+                >
+                  <option value="">Select Region</option>
+                  {somalilandRegions.map(region => <option key={region} value={region}>{region}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">District</label>
+                <select 
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-slate-900 appearance-none"
+                  required
+                >
+                  <option value="">Select District</option>
+                  {somalilandDistricts.map(district => <option key={district} value={district}>{district}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">Contact Person</label>
+                <input 
+                  type="text" 
+                  value={contactPerson}
+                  onChange={(e) => setContactPerson(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-slate-900"
+                  placeholder="Full name of contact person"
+                  required
+                />
+              </div>
             </div>
           </div>
         )}
 
         {currentStep === 2 && (
-          <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-blue-600" />
-                Branch Locations
-              </h2>
-              <button 
-                type="button"
-                onClick={addBranch}
-                className="flex items-center gap-1.5 text-sm font-bold text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-all"
-              >
-                <Plus className="w-4 h-4" />
-                Add Branch
-              </button>
-            </div>
-
-            <div className="space-y-6">
-              {branches.map((branch, index) => (
-                <div key={branch.id} className="p-6 rounded-xl border border-slate-100 bg-slate-50/50 space-y-4 relative group">
-                  {branches.length > 1 && (
-                    <button 
-                      type="button"
-                      onClick={() => removeBranch(branch.id)}
-                      className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Branch Name</label>
-                      <input 
-                        type="text" 
-                        className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none bg-white text-slate-900"
-                        placeholder="Main Branch"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Somaliland City</label>
-                      <select 
-                        className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none bg-white appearance-none text-slate-900"
-                        defaultValue={branch.city}
-                      >
-                        {somalilandCities.map(city => <option key={city} value={city}>{city}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Specific Address</label>
-                      <input 
-                        type="text" 
-                        className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none bg-white text-slate-900"
-                        placeholder="Independent Avenue"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {currentStep === 3 && (
           <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
               <FileUp className="w-5 h-5 text-blue-600" />
@@ -526,41 +543,34 @@ export default function NewApplicationPage() {
                 ));
               })()}
             </div>
+            <div className="flex items-center justify-between pt-4">
+              <button
+                type="button"
+                disabled={currentStep === 1 || isSubmitting}
+                onClick={() => setCurrentStep(currentStep - 1)}
+                className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl disabled:opacity-50 transition-all"
+              >
+                Back
+              </button>
+              
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className={`px-8 py-2.5 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex items-center gap-2 ${
+                  currentStep < 2 
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20' 
+                    : 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/20'
+                }`}
+              >
+                {isSubmitting ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  currentStep < 2 ? 'Next Step' : 'Complete Submission'
+                )}
+              </button>
+            </div>
           </div>
         )}
-
-        <div className="flex items-center justify-between pt-4">
-          <button
-            type="button"
-            disabled={(type === 'new' ? currentStep === 1 : currentStep === 1) || isSubmitting}
-            onClick={() => {
-              if (type === 'renewal' && currentStep === 3) {
-                setCurrentStep(1);
-              } else {
-                setCurrentStep(currentStep - 1);
-              }
-            }}
-            className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl disabled:opacity-0 transition-all"
-          >
-            Back
-          </button>
-          
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className={`px-8 py-2.5 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex items-center gap-2 ${
-              currentStep < 3 
-                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20' 
-                : 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/20'
-            }`}
-          >
-            {isSubmitting ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              currentStep < 3 ? 'Next Step' : 'Complete Submission'
-            )}
-          </button>
-        </div>
       </form>
     </div>
   );

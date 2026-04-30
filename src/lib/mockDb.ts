@@ -16,25 +16,23 @@ export const MOCK_DB = {
     }
 
     if (!localStorage.getItem('talms_agencies')) {
-      localStorage.setItem('talms_agencies', JSON.stringify([
-        { id: '1', name: 'Hargeisa Global Travel', licenseId: 'SL-2023-001', city: 'Hargeisa', branches: 4, joined: 'Jan 2023', status: 'Active' },
-        { id: '2', name: 'Borama Express', licenseId: 'SL-2023-042', city: 'Borama', branches: 2, joined: 'Mar 2023', status: 'Active' },
-        { id: '3', name: 'Berbera Sea Tours', licenseId: 'SL-2023-115', city: 'Berbera', branches: 3, joined: 'Jun 2023', status: 'Active' },
-      ]));
+      localStorage.setItem('talms_agencies', JSON.stringify([]));
     }
 
     if (!localStorage.getItem('talms_applications')) {
-      localStorage.setItem('talms_applications', JSON.stringify([
-        { id: 'app1', agency: 'Burao Expeditions', type: 'New', status: 'Under Review', statusColor: 'amber', date: 'Oct 24, 2023', priority: 'High' },
-        { id: 'app2', agency: 'Gabiley Travel', type: 'Renewal', status: 'Approved by Officer', statusColor: 'blue', date: 'Oct 23, 2023', priority: 'Medium' },
-      ]));
+      localStorage.setItem('talms_applications', JSON.stringify([]));
     }
 
     if (!localStorage.getItem('talms_notifications')) {
-      localStorage.setItem('talms_notifications', JSON.stringify([
-        { id: '1', type: 'approval', title: 'License Approved', message: 'The renewal for Atlas Travel Co. has been final approved.', time: '10 minutes ago', unread: true },
-        { id: '2', type: 'alert', title: 'Expiring Soon', message: '12 licenses are expiring within the next 30 days.', time: '1 hour ago', unread: true },
-      ]));
+      localStorage.setItem('talms_notifications', JSON.stringify([]));
+    }
+
+    if (!localStorage.getItem('talms_agency_changes')) {
+      localStorage.setItem('talms_agency_changes', JSON.stringify([]));
+    }
+
+    if (!localStorage.getItem('talms_activities')) {
+      localStorage.setItem('talms_activities', JSON.stringify([]));
     }
   },
 
@@ -46,6 +44,13 @@ export const MOCK_DB = {
   addApplication: (app: any) => {
     const apps = MOCK_DB.get('applications');
     MOCK_DB.save('applications', [app, ...apps]);
+  },
+
+  getNextLicenseId: () => {
+    const agencies = MOCK_DB.get('agencies');
+    const year = new Date().getFullYear();
+    const nextNumber = (agencies.length + 1).toString().padStart(3, '0');
+    return `SL-${year}-${nextNumber}`;
   },
 
   updateApplicationStatus: (id: string, status: string, color: string) => {
