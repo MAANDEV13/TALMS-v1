@@ -198,34 +198,6 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Danger Zone - Admin only */}
-        {user?.role === 'admin' && (
-          <div className="p-8 bg-red-50/40 border-t-2 border-red-100 space-y-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-sm font-black text-red-800 uppercase tracking-widest flex items-center gap-2">
-                  <Trash2 className="w-4 h-4" />
-                  Danger Zone
-                </h3>
-                <p className="text-xs text-red-600/70 font-medium mt-1">
-                  Reset all data to factory defaults. Only the 4 system users will remain. This cannot be undone.
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  if (confirm('⚠️ WARNING\n\nThis will permanently delete ALL agencies, applications, activities, fines, and change requests.\n\nOnly the 4 seed users will be kept.\n\nType OK to confirm.')) {
-                    MOCK_DB.clearAndSeedUsers();
-                    window.location.reload();
-                  }
-                }}
-                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all active:scale-95 shadow-lg shadow-red-600/20 flex items-center gap-2 shrink-0"
-              >
-                <Trash2 className="w-4 h-4" />
-                Reset Database
-              </button>
-            </div>
-          </div>
-        )}
 
         <div className="p-8 bg-slate-50/30 border-t border-slate-100">
           <button className="flex items-center gap-2 text-red-600 font-bold hover:underline">

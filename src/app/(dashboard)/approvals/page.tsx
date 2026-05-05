@@ -33,6 +33,9 @@ export default function ApprovalsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [reviewComment, setReviewComment] = useState('');
   const [docTab, setDocTab] = useState<'details' | 'documents'>('details');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
 
   useEffect(() => {
     MOCK_DB.init();
@@ -47,12 +50,18 @@ export default function ApprovalsPage() {
     MOCK_DB.updateApplicationStatus(selectedApp.id, status, color, reviewComment);
     MOCK_DB.logActivity(user?.name || 'Reviewer', `Updated status to: ${status} for`, selectedApp.agency);
     
-    // Create actual agency record if approved by GD
+    // Create or update actual agency record if approved by GD
     if (status === 'Approved by General Director') {
       const agencies = MOCK_DB.get('agencies');
-      const exists = agencies.some((a: any) => a.licenseId === selectedApp.agencyId || a.name.toLowerCase() === selectedApp.agency.toLowerCase());
+      const existingIdx = agencies.findIndex((a: any) => a.licenseId === selectedApp.agencyId || a.name.toLowerCase() === selectedApp.agency.toLowerCase());
       
-      if (!exists) {
+      const issueDate = new Date(selectedApp.registerDate || new Date());
+      const formattedIssueDate = issueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const expiryDateObj = new Date(issueDate);
+      expiryDateObj.setFullYear(expiryDateObj.getFullYear() + 1);
+      const formattedExpiryDate = expiryDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+      if (existingIdx === -1) {
         const newAgency = {
           id: Math.random().toString(36).substr(2, 9),
           licenseId: selectedApp.agencyId,
@@ -63,9 +72,17 @@ export default function ApprovalsPage() {
           contactPerson: selectedApp.contactPerson,
           phone: selectedApp.phone,
           email: selectedApp.email,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          issueDate: formattedIssueDate,
+          expiryDate: formattedExpiryDate,
+          printCount: 0
         };
         MOCK_DB.save('agencies', [newAgency, ...agencies]);
+      } else {
+        const updatedAgency = { ...agencies[existingIdx], status: 'Active', issueDate: formattedIssueDate, expiryDate: formattedExpiryDate };
+        const newAgencies = [...agencies];
+        newAgencies[existingIdx] = updatedAgency;
+        MOCK_DB.save('agencies', newAgencies);
       }
     }
 
@@ -83,6 +100,26 @@ export default function ApprovalsPage() {
   };
 
   const [message, setMessage] = useState<string | null>(null);
+
+  const filteredApprovals = approvals.filter((item) => {
+    const searchMatch = 
+      (item.agency || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.agencyId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.region || '').toLowerCase().includes(searchTerm.toLowerCase());
+      
+    const typeMatch = filterType === 'All' || item.type === filterType;
+    const statusMatch = filterStatus === 'All' || item.status === filterStatus;
+    
+    return searchMatch && typeMatch && statusMatch;
+  });
+
+  const filteredChanges = agencyChanges.filter((item) => {
+    const searchMatch = 
+      (item.agencyId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.requester || '').toLowerCase().includes(searchTerm.toLowerCase());
+      
+    return searchMatch;
+  });
 
   const handleApproveChange = () => {
     if (!selectedChange) return;
@@ -138,15 +175,43 @@ export default function ApprovalsPage() {
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex gap-4 items-center bg-slate-50/50">
-          <div className="relative flex-1">
+        <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-4 items-center bg-slate-50/50">
+          <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input type="text" placeholder="Search by agency name..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white" />
+            <input 
+              type="text" 
+              placeholder="Search by agency name or ID..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-all" 
+            />
           </div>
-          <button className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all">
-            <Filter className="w-4 h-4" />
-            <span>Filter By Role</span>
-          </button>
+          <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+            {activeTab === 'applications' && (
+              <>
+                <select 
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 outline-none"
+                >
+                  <option value="All">All Types</option>
+                  <option value="New">New</option>
+                  <option value="Renewal">Renewal</option>
+                </select>
+                <select 
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 outline-none"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Pending Initial Review">Pending Initial Review</option>
+                  <option value="Under Investigation">Under Investigation</option>
+                  <option value="Pending Director Approval">Pending Director Approval</option>
+                  <option value="Pending DG Approval">Pending DG Approval</option>
+                </select>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -162,7 +227,7 @@ export default function ApprovalsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {approvals.map((item) => (
+                {filteredApprovals.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50 transition-colors group cursor-pointer">
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
@@ -215,7 +280,7 @@ export default function ApprovalsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {agencyChanges.map((item) => (
+                {filteredChanges.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50 transition-colors group cursor-pointer">
                     <td className="px-6 py-4 text-sm font-bold text-slate-900">
                       {item.agencyId}
@@ -584,7 +649,20 @@ export default function ApprovalsPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[9px] font-black bg-green-100 text-green-700 px-2 py-1 rounded-lg border border-green-200 uppercase">Verified</span>
-                          <button className="w-8 h-8 bg-slate-100 hover:bg-blue-600 text-slate-400 hover:text-white rounded-lg flex items-center justify-center transition-all" title="View Document">
+                          <button 
+                            onClick={() => {
+                              const base64Data = selectedApp.docFileData?.[doc];
+                              if (base64Data) {
+                                const newWindow = window.open();
+                                if (newWindow) {
+                                  newWindow.document.write(`<iframe src="${base64Data}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                                }
+                              } else {
+                                alert('Document file not available in mock database.');
+                              }
+                            }}
+                            className="w-8 h-8 bg-slate-100 hover:bg-blue-600 text-slate-400 hover:text-white rounded-lg flex items-center justify-center transition-all" title="View Document"
+                          >
                             <Eye className="w-4 h-4" />
                           </button>
                         </div>
@@ -640,7 +718,19 @@ export default function ApprovalsPage() {
                 <div className="col-span-2 flex gap-3">
                   {user?.role === 'director' && selectedApp.status === 'Approved by General Director' && (
                     <button 
-                      onClick={() => window.open(`/print/license/${selectedApp.id}`, '_blank', 'width=900,height=1200')}
+                      onClick={() => {
+                        if (user?.role === 'director') {
+                          const agencies = MOCK_DB.get('agencies');
+                          const idx = agencies.findIndex((a: any) => a.licenseId === selectedApp.agencyId);
+                          if (idx !== -1) {
+                            const newAgencies = [...agencies];
+                            newAgencies[idx].printCount = (newAgencies[idx].printCount || 0) + 1;
+                            MOCK_DB.save('agencies', newAgencies);
+                            MOCK_DB.logActivity(user.name, 'Printed certificate for', selectedApp.agency);
+                          }
+                        }
+                        window.open(`/print/license/${selectedApp.id}`, '_blank', 'width=900,height=1200');
+                      }}
                       className="flex-1 py-3.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2"
                     >
                       <Printer className="w-5 h-5" />

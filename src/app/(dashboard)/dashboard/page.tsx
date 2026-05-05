@@ -32,16 +32,24 @@ export default function DashboardPage() {
     const agencies = MOCK_DB.get('agencies');
     const logs = MOCK_DB.get('activities');
 
+    let filteredApps = apps;
+    let filteredAgencies = agencies;
+
+    if (user?.role === 'regional_director' && user.region) {
+      filteredApps = apps.filter((a: any) => a.region === user.region);
+      filteredAgencies = agencies.filter((a: any) => a.region === user.region);
+    }
+
     // Calculate real stats
     setStats({
-      total: agencies.length,
-      pending: apps.filter((a: any) => a.status.includes('Review')).length,
-      approved: apps.filter((a: any) => a.status === 'Approved by General Director').length,
-      expiring: agencies.filter((a: any) => a.status === 'Expired').length
+      total: filteredAgencies.length,
+      pending: filteredApps.filter((a: any) => a.status.includes('Review')).length,
+      approved: filteredApps.filter((a: any) => a.status === 'Approved by General Director').length,
+      expiring: filteredAgencies.filter((a: any) => a.status === 'Expired').length
     });
 
     // Format applications
-    const formattedApps = apps.slice(0, 6).map((app: any) => ({
+    const formattedApps = filteredApps.slice(0, 6).map((app: any) => ({
       name: app.agency,
       type: app.type,
       status: app.status,
@@ -142,7 +150,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {user?.role === 'admin' && (
+        {/* System Activity for admin and directors */}
+        {user?.role !== 'officer' && user?.role !== 'regional_director' && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
             <h2 className="text-lg font-bold text-slate-900">System Activity</h2>
             <div className="space-y-6 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">

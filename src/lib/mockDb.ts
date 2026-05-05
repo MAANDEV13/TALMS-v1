@@ -9,9 +9,11 @@ export const MOCK_DB = {
     if (!localStorage.getItem('talms_users')) {
       localStorage.setItem('talms_users', JSON.stringify([
         { id: '1', name: 'Admin User', email: 'admin@agency.gov', password: 'admin123', role: 'admin', status: 'Active' },
-        { id: '2', name: 'Ahmed Officer', email: 'officer@agency.gov', password: 'admin123', role: 'officer', status: 'Active' },
+        { id: '2', name: 'Ahmed Officer', email: 'officer@agency.gov', password: 'admin123', role: 'officer', region: 'Maroodi Jeex', status: 'Active' },
         { id: '3', name: 'Sarah Director', email: 'director@agency.gov', password: 'admin123', role: 'director', status: 'Active' },
         { id: '4', name: 'Guleid General', email: 'gd@agency.gov', password: 'admin123', role: 'general_director', status: 'Active' },
+        { id: '5', name: 'Awdal Director', email: 'awdal@agency.gov', password: 'admin123', role: 'regional_director', region: 'Awdal', status: 'Active' },
+        { id: '6', name: 'Sool Director', email: 'sool@agency.gov', password: 'admin123', role: 'regional_director', region: 'Sool', status: 'Active' },
       ]));
     }
 
@@ -179,9 +181,11 @@ export const MOCK_DB = {
     if (typeof window === 'undefined') return;
     const SEED_USERS = [
       { id: '1', name: 'Admin User',    email: 'admin@agency.gov',    password: 'admin123', role: 'admin',            status: 'Active' },
-      { id: '2', name: 'Ahmed Officer', email: 'officer@agency.gov',  password: 'admin123', role: 'officer',          status: 'Active' },
+      { id: '2', name: 'Ahmed Officer', email: 'officer@agency.gov',  password: 'admin123', role: 'officer', region: 'Maroodi Jeex', status: 'Active' },
       { id: '3', name: 'Sarah Director',email: 'director@agency.gov', password: 'admin123', role: 'director',         status: 'Active' },
       { id: '4', name: 'Guleid General',email: 'gd@agency.gov',       password: 'admin123', role: 'general_director', status: 'Active' },
+      { id: '5', name: 'Awdal Director',email: 'awdal@agency.gov',    password: 'admin123', role: 'regional_director', region: 'Awdal', status: 'Active' },
+      { id: '6', name: 'Sool Director', email: 'sool@agency.gov',     password: 'admin123', role: 'regional_director', region: 'Sool', status: 'Active' },
     ];
     // Clear every collection
     ['agencies','applications','notifications','agency_changes','activities','fines'].forEach(

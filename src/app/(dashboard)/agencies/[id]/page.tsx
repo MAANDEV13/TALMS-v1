@@ -17,7 +17,8 @@ import {
   Printer,
   History,
   Download,
-  Edit2
+  Edit2,
+  Eye
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -81,7 +82,19 @@ export default function AgencyDetailPage() {
           </div>
         </div>
         <div className="flex gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all">
+          <button 
+            onClick={() => {
+              if (user?.role === 'director') {
+                const updated = { ...agency, printCount: (agency.printCount || 0) + 1 };
+                setAgency(updated);
+                const all = MOCK_DB.get('agencies');
+                MOCK_DB.save('agencies', all.map((a: any) => a.id === id ? updated : a));
+                MOCK_DB.logActivity(user.name, 'Printed agency status report for', agency.name);
+              }
+              window.print();
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all"
+          >
             <Printer className="w-4 h-4" />
             Print Status
           </button>
@@ -196,16 +209,25 @@ export default function AgencyDetailPage() {
                 <div className="space-y-4">
                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
                       <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Issue Date</p>
-                      <p className="text-sm font-bold">{agency.issueDate || 'Jan 12, 2023'}</p>
+                      <p className="text-sm font-bold">{agency.issueDate || 'Not Issued'}</p>
                    </div>
                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
                       <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Expiry Date</p>
-                      <p className="text-sm font-bold text-amber-400">{agency.expiryDate || 'Jan 12, 2024'}</p>
+                      <p className="text-sm font-bold text-amber-400">{agency.expiryDate || 'Not Issued'}</p>
                    </div>
                 </div>
                 <button className="w-full py-4 bg-blue-600 hover:bg-blue-700 rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-600/20 active:scale-95">
                    Request Renewal
                 </button>
+              {(user?.role === 'officer' || user?.role === 'general_director' || user?.role === 'director') && agency.printCount > 0 && (
+                <div className="p-4 mt-4 bg-amber-50 border border-amber-100 rounded-3xl flex items-center gap-3">
+                  <Printer className="w-5 h-5 text-amber-600" />
+                  <div>
+                    <h4 className="text-sm font-bold text-amber-900 uppercase">Print Tracking</h4>
+                    <p className="text-xs text-amber-700 font-medium">Certificate printed {agency.printCount} time(s) by Director.</p>
+                  </div>
+                </div>
+              )}
              </div>
 
              <div className="p-6 bg-blue-50 border border-blue-100 rounded-3xl">
@@ -282,13 +304,32 @@ export default function AgencyDetailPage() {
                       }
                     }}
                   />
-                  <label 
-                    htmlFor={`replace-${i}`}
-                    className="px-4 py-2 bg-white border border-slate-200 text-blue-600 text-[10px] font-black uppercase rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Edit2 className="w-3 h-3" />
-                    Replace
-                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        const base64Data = agency.docFileData?.[doc];
+                        if (base64Data) {
+                          const newWindow = window.open();
+                          if (newWindow) {
+                            newWindow.document.write(`<iframe src="${base64Data}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                          }
+                        } else {
+                          alert('Document file not available in mock database.');
+                        }
+                      }}
+                      className="px-4 py-2 bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-200 transition-all shadow-sm active:scale-95 flex items-center gap-1.5"
+                    >
+                      <Eye className="w-3 h-3" />
+                      View
+                    </button>
+                    <label 
+                      htmlFor={`replace-${i}`}
+                      className="px-4 py-2 bg-white border border-slate-200 text-blue-600 text-[10px] font-black uppercase rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                      Replace
+                    </label>
+                  </div>
                 </div>
               ))}
            </div>

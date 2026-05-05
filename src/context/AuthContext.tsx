@@ -3,13 +3,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { MOCK_DB } from '@/lib/mockDb';
 
-export type UserRole = 'admin' | 'officer' | 'director' | 'general_director' | 'minister';
+export type UserRole = 'admin' | 'officer' | 'regional_director' | 'director' | 'general_director' | 'minister';
 
 interface User {
   id: string;
   email: string;
   name: string;
   role: UserRole;
+  region?: string;
 }
 
 interface AuthContextType {
@@ -47,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: foundUser.email,
         name: foundUser.name,
         role: foundUser.role,
+        region: foundUser.region,
       };
       setUser(sessionUser);
       localStorage.setItem('talms_session', JSON.stringify(sessionUser));

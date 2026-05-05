@@ -18,14 +18,26 @@ import { MOCK_DB } from '@/lib/mockDb';
 export default function UserManagementPage() {
   const [showAddUser, setShowAddUser] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterRole, setFilterRole] = useState('All');
   
   // Form State
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
-    role: 'officer'
+    role: 'officer',
+    region: ''
   });
+
+  const somalilandRegions = [
+    'Maroodi Jeex',
+    'Togdheer',
+    'Sanaag',
+    'Awdal',
+    'Sool',
+    'Saaxil'
+  ];
 
   useEffect(() => {
     setUsers(MOCK_DB.get('users'));
@@ -36,7 +48,7 @@ export default function UserManagementPage() {
     MOCK_DB.addUser(formData);
     setUsers(MOCK_DB.get('users'));
     setShowAddUser(false);
-    setFormData({ name: '', email: '', password: '', role: 'officer' });
+    setFormData({ name: '', email: '', password: '', role: 'officer', region: '' });
   };
 
   return (
@@ -62,14 +74,25 @@ export default function UserManagementPage() {
             <input 
               type="text" 
               placeholder="Search by name or email..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
             />
           </div>
           <div className="flex items-center gap-3 w-full md:w-auto">
-            <button className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all">
-              <Filter className="w-4 h-4" />
-              <span>Filter Role</span>
-            </button>
+            <select 
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value)}
+              className="px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 outline-none"
+            >
+              <option value="All">All Roles</option>
+              <option value="officer">Officer</option>
+              <option value="regional_director">Regional Officer</option>
+              <option value="director">Director</option>
+              <option value="general_director">General Director</option>
+              <option value="minister">Minister</option>
+              <option value="admin">Admin</option>
+            </select>
           </div>
         </div>
 
@@ -84,7 +107,12 @@ export default function UserManagementPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {users.map((user) => (
+              {users.filter(u => {
+                const s = searchTerm.toLowerCase();
+                const matchesSearch = (u.name || '').toLowerCase().includes(s) || (u.email || '').toLowerCase().includes(s);
+                const matchesRole = filterRole === 'All' || u.role === filterRole;
+                return matchesSearch && matchesRole;
+              }).map((user) => (
                 <tr key={user.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -101,10 +129,17 @@ export default function UserManagementPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200 capitalize">
-                      <Shield className="w-3 h-3 text-blue-500" />
-                      {user.role.replace('_', ' ')}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200 capitalize w-fit">
+                        <Shield className="w-3 h-3 text-blue-500" />
+                        {user.role.replace('_', ' ')}
+                      </span>
+                      {user.region && (
+                        <span className="text-[10px] font-bold text-slate-400 ml-1">
+                          Region: {user.region}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
@@ -184,16 +219,33 @@ export default function UserManagementPage() {
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">User Role</label>
                 <select 
                   value={formData.role}
-                  onChange={(e) => setFormData({...formData, role: e.target.value})}
+                  onChange={(e) => setFormData({...formData, role: e.target.value, region: e.target.value === 'regional_director' ? somalilandRegions[0] : ''})}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none bg-white appearance-none"
                 >
                   <option value="officer">Officer</option>
+                  <option value="regional_director">Regional Officer</option>
                   <option value="director">Director</option>
                   <option value="general_director">General Director</option>
                   <option value="minister">Minister</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
+
+              {formData.role === 'regional_director' && (
+                <div className="space-y-1.5 animate-in slide-in-from-top-2 duration-300">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest text-blue-600">Assigned Region</label>
+                  <select 
+                    value={formData.region}
+                    onChange={(e) => setFormData({...formData, region: e.target.value})}
+                    className="w-full px-4 py-2.5 rounded-xl border border-blue-200 bg-blue-50/50 focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-bold text-blue-900"
+                    required
+                  >
+                    {somalilandRegions.map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="pt-4 flex gap-3">
                 <button 

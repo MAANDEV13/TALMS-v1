@@ -12,12 +12,21 @@ import {
 } from 'lucide-react';
 
 export default function NotificationsPage() {
-  const notifications = [
-    { id: '1', type: 'approval', title: 'License Approved', message: 'The renewal for Atlas Travel Co. has been final approved.', time: '10 minutes ago', unread: true },
-    { id: '2', type: 'alert', title: 'Expiring Soon', message: '12 licenses are expiring within the next 30 days.', time: '1 hour ago', unread: true },
-    { id: '3', type: 'message', title: 'New Comment', message: 'Director left a comment on Nomad Expeditions application.', time: '3 hours ago', unread: false },
-    { id: '4', type: 'system', title: 'System Update', message: 'TALMS v1.2 has been deployed successfully.', time: '1 day ago', unread: false },
-  ];
+  const [notifications, setNotifications] = React.useState<any[]>([]);
+  
+  React.useEffect(() => {
+    import('@/lib/mockDb').then(({ MOCK_DB }) => {
+      MOCK_DB.init();
+      setNotifications(MOCK_DB.get('notifications') || []);
+    });
+  }, []);
+
+  const handleClearNotifications = () => {
+    import('@/lib/mockDb').then(({ MOCK_DB }) => {
+      MOCK_DB.save('notifications', []);
+      setNotifications([]);
+    });
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -26,7 +35,10 @@ export default function NotificationsPage() {
           <h1 className="text-3xl font-bold text-slate-900">Notifications</h1>
           <p className="text-slate-500 mt-1">Stay updated with application statuses and system alerts.</p>
         </div>
-        <button className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-xl transition-all">
+        <button 
+          onClick={handleClearNotifications}
+          className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-xl transition-all"
+        >
           <Check className="w-4 h-4" />
           Mark all as read
         </button>

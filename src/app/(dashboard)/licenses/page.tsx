@@ -12,6 +12,7 @@ import {
   ChevronRight,
   MessageSquare,
   AlertCircle,
+  Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { MOCK_DB } from '@/lib/mockDb';
@@ -20,12 +21,20 @@ import { useAuth } from '@/context/AuthContext';
 export default function LicensesPage() {
   const { user } = useAuth();
   const [applications, setApplications] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
 
   useEffect(() => {
     let saved = MOCK_DB.get('applications');
-    // Hide drafts from non-officers
-    if (user?.role !== 'officer') {
+    // Hide drafts from non-officers/regional_directors
+    if (user?.role !== 'officer' && user?.role !== 'regional_director') {
       saved = saved.filter((app: any) => app.status !== 'Draft');
+    }
+    
+    // Filter by region for regional_director
+    if (user?.role === 'regional_director' && user.region) {
+      saved = saved.filter((app: any) => app.region === user.region);
     }
     setApplications(saved);
   }, [user]);
@@ -42,6 +51,19 @@ export default function LicensesPage() {
     window.open(`/print/license/${id}`, '_blank', 'width=900,height=1200');
   };
 
+  const filteredApps = applications.filter((app) => {
+    const searchMatch = 
+      (app.agency || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (app.agencyId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (app.region || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (app.district || '').toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const typeMatch = filterType === 'All' || app.type === filterType;
+    const statusMatch = filterStatus === 'All' || app.status === filterStatus;
+    
+    return searchMatch && typeMatch && statusMatch;
+  });
+
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -49,7 +71,7 @@ export default function LicensesPage() {
           <h1 className="text-3xl font-bold text-slate-900">License Applications</h1>
           <p className="text-slate-500 mt-1">Manage and track travel agency license applications in Somaliland.</p>
         </div>
-        {user?.role === 'officer' && (
+        {(user?.role === 'officer' || user?.role === 'regional_director') && (
           <Link 
             href="/licenses/new"
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-blue-600/20 transition-all active:scale-95"
@@ -61,15 +83,42 @@ export default function LicensesPage() {
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex gap-4 items-center bg-slate-50/50">
-          <div className="relative flex-1">
+        <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-4 items-center bg-slate-50/50">
+          <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input type="text" placeholder="Search applications..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" />
+            <input 
+              type="text" 
+              placeholder="Search applications..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-all" 
+            />
           </div>
-          <button className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all">
-            <Filter className="w-4 h-4" />
-            <span>Filter</span>
-          </button>
+          <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+            <select 
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 outline-none"
+            >
+              <option value="All">All Types</option>
+              <option value="New">New</option>
+              <option value="Renewal">Renewal</option>
+            </select>
+            <select 
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 outline-none"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Draft">Draft</option>
+              <option value="Pending Initial Review">Pending Initial Review</option>
+              <option value="Under Investigation">Under Investigation</option>
+              <option value="Pending Director Approval">Pending Director Approval</option>
+              <option value="Pending DG Approval">Pending DG Approval</option>
+              <option value="Approved by General Director">Approved</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -89,7 +138,7 @@ export default function LicensesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {applications.length > 0 ? applications.map((app) => (
+              {filteredApps.length > 0 ? filteredApps.map((app) => (
                 <tr key={app.id} className="hover:bg-slate-50 transition-colors group cursor-pointer">
                   <td className="px-6 py-4">
                     <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-1 rounded uppercase tracking-tighter">
@@ -104,14 +153,30 @@ export default function LicensesPage() {
                   <td className="px-6 py-4 text-sm text-slate-600">{app.registerDate || '-'}</td>
                   <td className="px-6 py-4 text-sm text-slate-600">{app.type}</td>
                     <td className="px-6 py-4 text-sm font-bold">
-                      {app.status === 'Draft' && user?.role === 'officer' ? (
-                        <Link 
-                          href={`/licenses/new?id=${app.id}`}
-                          className="flex items-center gap-1.5 text-amber-600 hover:text-amber-700 hover:underline"
-                        >
-                          Continue Draft
-                          <ChevronRight className="w-4 h-4" />
-                        </Link>
+                      {app.status === 'Draft' && (user?.role === 'officer' || user?.role === 'regional_director') ? (
+                        <div className="flex items-center gap-3">
+                          <Link 
+                            href={`/licenses/new?id=${app.id}`}
+                            className="flex items-center gap-1.5 text-amber-600 hover:text-amber-700 hover:underline"
+                          >
+                            Continue Draft
+                            <ChevronRight className="w-4 h-4" />
+                          </Link>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm('Are you sure you want to discard this draft? This cannot be undone.')) {
+                                const apps = MOCK_DB.get('applications');
+                                MOCK_DB.save('applications', apps.filter((a: any) => a.id !== app.id));
+                                setApplications(prev => prev.filter(a => a.id !== app.id));
+                              }
+                            }}
+                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
+                            title="Discard Draft"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       ) : (
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
                           app.statusColor === 'amber' ? 'bg-amber-50 text-amber-700 border-amber-100' :

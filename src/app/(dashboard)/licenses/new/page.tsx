@@ -62,14 +62,20 @@ function NewApplicationPageContent() {
   const [feePaid, setFeePaid] = useState(0);
   const [uploadedDocs, setUploadedDocs] = useState<string[]>([]);
   const [docFileNames, setDocFileNames] = useState<Record<string, string>>({});
+  const [docFileData, setDocFileData] = useState<Record<string, string>>({});
   const [agencyLogoPreview, setAgencyLogoPreview] = useState<string | null>(null);
   const [ownerPhotoPreview, setOwnerPhotoPreview] = useState<string | null>(null);
+  const [paymentReceiptFile, setPaymentReceiptFile] = useState<string | null>(null);
 
   useEffect(() => {
     // 1. Role protection
-    if (user && user.role !== 'officer') {
+    if (user && user.role !== 'officer' && user.role !== 'regional_director') {
       router.push('/dashboard');
       return;
+    }
+
+    if (user && user.role === 'regional_director' && user.region) {
+      setRegion(user.region);
     }
 
     // 2. Load settings & Sync Fees
@@ -120,34 +126,15 @@ function NewApplicationPageContent() {
     }
   }, [user, router, draftId, type, selectedAgency]);
 
-  const somalilandRegions = [
-    'Maroodi Jeex',
-    'Awdal',
-    'Sool',
-    'Togdheer',
-    'Sanaag',
-    'Sahil'
-  ];
-
-  const somalilandDistricts = [
-    'Hargeisa',
-    'Borama',
-    'Berbera',
-    'Burao',
-    'Erigavo',
-    'Las Anod',
-    'Gabiley',
-    'Wajaale',
-    'Sheikh',
-    'Aynabo',
-    'Kalabaydh',
-    'Arabsiyo',
-    'Buuhoodle',
-    'Caynaba',
-    'Ceerigaabo',
-    'Laasqoray',
-    'Xudun'
-  ];
+  const somalilandRegionsData: Record<string, string[]> = {
+    'Maroodi Jeex': ['Hargeisa', 'Gabilay', 'Baligubadle', 'Salaxlay', 'Faraweyne', 'Sabawanaag', 'Caddaadlay', 'Daarasalaam', 'Allaybaday', 'Dacar Budhuq'],
+    'Togdheer': ['Burco', 'Oodwayne', 'Buuhoodle', 'Duruqsi', 'Sh. Xasan Geelle', 'Qoryaale'],
+    'Sanaag': ['Ceerigaabo', 'Ceel-af-weyn', 'Badhan', 'Laas-qoray', 'Dhahar', 'Gar-adag', 'Maydh', 'Darar-weyne', 'Fiqi-fulliye', 'Xiis'],
+    'Awdal': ['Boorama', 'Baki', 'Saylac', 'Lughaya', 'Dilla'],
+    'Sool': ['Laascaanood', 'Caynabo', 'Taleex', 'Xuddun', 'Boocane', 'Yagoori'],
+    'Saaxil': ['Berbera', 'Sheekh', 'Ma-dheera', 'Bulaxaar', 'Xaggal']
+  };
+  const somalilandRegions = Object.keys(somalilandRegionsData);
 
   const handleNameCheck = (): boolean => {
     if (!agencyName) return false;
@@ -208,7 +195,8 @@ function NewApplicationPageContent() {
         applicationFee: appFee,
         discount: discount,
         paidAmount: feePaid,
-        totalDue: (regFee + appFee) - discount
+        totalDue: (regFee + appFee) - discount,
+        paymentReceipt: paymentReceiptFile
       },
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     };
@@ -220,6 +208,14 @@ function NewApplicationPageContent() {
       MOCK_DB.logActivity(user?.name || 'Officer', `Submitted ${newApp.type} application for`, agencyName);
     }
     router.push('/licenses');
+  };
+
+  const handleDiscardDraft = () => {
+    if (draftId && confirm('Are you sure you want to discard this draft? This cannot be undone.')) {
+      const apps = MOCK_DB.get('applications');
+      MOCK_DB.save('applications', apps.filter((a: any) => a.id !== draftId));
+      router.push('/licenses');
+    }
   };
 
   const [selectionMade, setSelectionMade] = useState(false);
@@ -285,10 +281,12 @@ function NewApplicationPageContent() {
           applicationFee: appFee,
           discount: discount,
           paidAmount: feePaid,
-          totalDue: (regFee + appFee) - discount
+          totalDue: (regFee + appFee) - discount,
+          paymentReceipt: paymentReceiptFile
         },
         uploadedDocs: uploadedDocs,
         docFileNames: docFileNames,
+        docFileData: docFileData,
         date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       };
 
@@ -552,12 +550,16 @@ function NewApplicationPageContent() {
                 <label className="text-sm font-semibold text-slate-700">Region</label>
                 <select 
                   value={region}
-                  onChange={(e) => setRegion(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-slate-900 appearance-none"
+                  onChange={(e) => {
+                    setRegion(e.target.value);
+                    setDistrict('');
+                  }}
+                  disabled={user?.role === 'regional_director'}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-slate-900 appearance-none disabled:bg-slate-100 disabled:text-slate-500"
                   required
                 >
                   <option value="">Select Region</option>
-                  {somalilandRegions.map(region => <option key={region} value={region}>{region}</option>)}
+                  {somalilandRegions.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
 
@@ -566,11 +568,12 @@ function NewApplicationPageContent() {
                 <select 
                   value={district}
                   onChange={(e) => setDistrict(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-slate-900 appearance-none"
+                  disabled={!region}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-slate-900 appearance-none disabled:bg-slate-100 disabled:text-slate-500"
                   required
                 >
                   <option value="">Select District</option>
-                  {somalilandDistricts.map(district => <option key={district} value={district}>{district}</option>)}
+                  {region && somalilandRegionsData[region]?.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
 
@@ -659,13 +662,24 @@ function NewApplicationPageContent() {
             
             {/* Step 1 Navigation */}
             <div className="flex items-center justify-between mt-8">
-              <button 
-                type="button"
-                onClick={handleSaveDraft}
-                className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
-              >
-                Save as Draft
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button"
+                  onClick={handleSaveDraft}
+                  className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                >
+                  Save as Draft
+                </button>
+                {draftId && (
+                  <button 
+                    type="button"
+                    onClick={handleDiscardDraft}
+                    className="px-6 py-2.5 font-bold text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                  >
+                    Discard Draft
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setCurrentStep(2)}
@@ -814,9 +828,15 @@ function NewApplicationPageContent() {
                             return;
                           }
                           const action = isUploaded ? 'Replaced' : 'Uploaded';
-                          setUploadedDocs((prev) => prev.includes(doc) ? prev : [...prev, doc]);
-                          setDocFileNames((prev) => ({ ...prev, [doc]: file.name }));
-                          MOCK_DB.logActivity(user?.name || 'Officer', `${action} document: ${doc} (${file.name})`, agencyName || 'New Application');
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            const base64String = reader.result as string;
+                            setDocFileData((prev) => ({ ...prev, [doc]: base64String }));
+                            setUploadedDocs((prev) => prev.includes(doc) ? prev : [...prev, doc]);
+                            setDocFileNames((prev) => ({ ...prev, [doc]: file.name }));
+                            MOCK_DB.logActivity(user?.name || 'Officer', `${action} document: ${doc} (${file.name})`, agencyName || 'New Application');
+                          };
+                          reader.readAsDataURL(file);
                           e.target.value = '';
                         }}
                       />
@@ -836,13 +856,24 @@ function NewApplicationPageContent() {
               })()}
             </div>
             <div className="flex items-center justify-between pt-8 border-t border-slate-100 mt-8">
-              <button 
-                type="button"
-                onClick={handleSaveDraft}
-                className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
-              >
-                Save as Draft
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button"
+                  onClick={handleSaveDraft}
+                  className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                >
+                  Save as Draft
+                </button>
+                {draftId && (
+                  <button 
+                    type="button"
+                    onClick={handleDiscardDraft}
+                    className="px-6 py-2.5 font-bold text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                  >
+                    Discard Draft
+                  </button>
+                )}
+              </div>
               <div className="flex gap-3">
                 <button
                   type="button"
@@ -942,16 +973,65 @@ function NewApplicationPageContent() {
                   Please verify all financial data before submission. These fees will be reviewed by the Department Director and General Director.
                 </p>
               </div>
+
+              {/* QR Code / Receipt Upload */}
+              <div className="space-y-2 pt-4 border-t border-slate-100">
+                <label className="text-sm font-bold text-slate-700">Payment QR Code / Receipt (Optional)</label>
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 rounded-xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center shrink-0 overflow-hidden">
+                    {paymentReceiptFile ? (
+                      <img src={paymentReceiptFile} alt="Receipt" className="w-full h-full object-cover" />
+                    ) : (
+                      <Camera className="w-6 h-6 text-slate-300" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <input 
+                      type="file" 
+                      id="receipt-upload" 
+                      className="hidden" 
+                      accept="image/*,.pdf" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 2 * 1024 * 1024) { alert('Receipt must be under 2MB'); return; }
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setPaymentReceiptFile(reader.result as string);
+                        };
+                        reader.readAsDataURL(file);
+                        e.target.value = '';
+                      }} 
+                    />
+                    <label htmlFor="receipt-upload" className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold uppercase rounded-xl transition-all cursor-pointer inline-flex items-center gap-2">
+                      <FileUp className="w-4 h-4" />
+                      Upload Receipt
+                    </label>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">JPG/PNG/PDF · Max 2MB</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center justify-between pt-8 border-t border-slate-100 mt-8">
-              <button 
-                type="button"
-                onClick={handleSaveDraft}
-                className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
-              >
-                Save as Draft
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button"
+                  onClick={handleSaveDraft}
+                  className="px-6 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                >
+                  Save as Draft
+                </button>
+                {draftId && (
+                  <button 
+                    type="button"
+                    onClick={handleDiscardDraft}
+                    className="px-6 py-2.5 font-bold text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                  >
+                    Discard Draft
+                  </button>
+                )}
+              </div>
               <div className="flex gap-3">
                 <button
                   type="button"

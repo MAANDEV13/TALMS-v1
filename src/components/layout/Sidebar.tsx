@@ -33,8 +33,8 @@ interface SidebarItem {
 
 const sidebarItems: SidebarItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
-  { icon: FileText, label: 'Applications', href: '/licenses', roles: ['admin', 'officer'] },
-  { icon: Building2, label: 'Agencies', href: '/agencies', roles: ['admin', 'officer', 'director', 'general_director'] },
+  { icon: FileText, label: 'Applications', href: '/licenses', roles: ['admin', 'officer', 'regional_director'] },
+  { icon: Building2, label: 'Agencies', href: '/agencies', roles: ['admin', 'officer', 'director', 'general_director', 'regional_director'] },
   { icon: FileCheck, label: 'Approvals', href: '/approvals', roles: ['director', 'general_director'] },
   { icon: DollarSign, label: 'Fines', href: '/fines', roles: ['director'] },
   { icon: History, label: 'Activity Logs', href: '/activities', roles: ['admin', 'general_director'] },

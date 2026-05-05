@@ -21,26 +21,23 @@ export default function ActivitiesPage() {
   const [activities, setActivities] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
+  const [filterAction, setFilterAction] = useState('All');
+
   useEffect(() => {
     MOCK_DB.init();
-    
-    // Add some initial logs if empty
-    if ((MOCK_DB.get('activities') || []).length === 0) {
-      MOCK_DB.logActivity('Guleid General', 'Approved License Application', 'Burao Expeditions');
-      MOCK_DB.logActivity('Ahmed Officer', 'Submitted New Application', 'Gabiley Travel');
-      MOCK_DB.logActivity('Sarah Director', 'Issued Penalty Fine ($200)', 'Berbera Sea Tours');
-      MOCK_DB.logActivity('Admin User', 'Updated System Settings', 'Mail Server');
-      MOCK_DB.logActivity('Guleid General', 'Approved Agency Edit', 'Hargeisa Global Travel');
-    }
-
     setActivities(MOCK_DB.get('activities') || []);
   }, []);
 
-  const filteredActivities = activities.filter(a => 
-    a.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    a.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    a.target.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredActivities = activities.filter(a => {
+    const searchMatch = 
+      (a.user || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.action || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.target || '').toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const actionMatch = filterAction === 'All' || (a.action || '').toLowerCase().includes(filterAction.toLowerCase());
+    
+    return searchMatch && actionMatch;
+  });
 
   if (user?.role !== 'admin' && user?.role !== 'general_director') {
     return <div className="p-20 text-center text-slate-500 font-bold">Unauthorized. Access restricted to Admin and General Director.</div>;
@@ -60,8 +57,8 @@ export default function ActivitiesPage() {
       </div>
 
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex gap-4 items-center">
-          <div className="relative flex-1">
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row gap-4 items-center">
+          <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input 
               type="text" 
@@ -71,10 +68,20 @@ export default function ActivitiesPage() {
               className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-all" 
             />
           </div>
-          <button className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
-            <Filter className="w-4 h-4" />
-            <span>All Activities</span>
-          </button>
+          <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+            <select 
+              value={filterAction}
+              onChange={(e) => setFilterAction(e.target.value)}
+              className="px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 outline-none"
+            >
+              <option value="All">All Activities</option>
+              <option value="Approved">Approved</option>
+              <option value="Submitted">Submitted</option>
+              <option value="Issued">Issued</option>
+              <option value="Updated">Updated</option>
+              <option value="Deleted">Deleted</option>
+            </select>
+          </div>
         </div>
 
         <div className="overflow-x-auto">

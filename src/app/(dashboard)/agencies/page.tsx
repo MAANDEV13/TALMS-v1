@@ -24,11 +24,19 @@ export default function AgenciesPage() {
   const [agencies, setAgencies] = React.useState<any[]>([]);
   const [message, setMessage] = React.useState<string | null>(null);
   const [editingAgency, setEditingAgency] = React.useState<any>(null);
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [filterStatus, setFilterStatus] = React.useState('All');
+  const [filterRegion, setFilterRegion] = React.useState('All');
 
   React.useEffect(() => {
     MOCK_DB.init();
-    setAgencies(MOCK_DB.get('agencies'));
-  }, []);
+    const allAgencies = MOCK_DB.get('agencies');
+    if (user?.role === 'regional_director' && user.region) {
+      setAgencies(allAgencies.filter((a: any) => a.region === user.region));
+    } else {
+      setAgencies(allAgencies);
+    }
+  }, [user]);
 
   const handleRequestChange = (agencyId: string, type: 'edit' | 'delete') => {
     if (type === 'edit') {
@@ -57,6 +65,21 @@ export default function AgenciesPage() {
     setMessage(`Your edit request for ${editingAgency.name} has been sent to the General Director.`);
     setTimeout(() => setMessage(null), 5000);
   };
+
+  const filteredAgencies = agencies.filter((a) => {
+    const searchMatch = 
+      (a.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.region || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.district || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.contactPerson || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.email || '').toLowerCase().includes(searchTerm.toLowerCase());
+      
+    const statusMatch = filterStatus === 'All' || a.status === filterStatus;
+    const regionMatch = filterRegion === 'All' || a.region === filterRegion;
+    
+    return searchMatch && statusMatch && regionMatch;
+  });
 
   return (
     <div className="space-y-8 relative">
@@ -159,15 +182,44 @@ export default function AgenciesPage() {
       )}
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex gap-4 items-center">
-          <div className="relative flex-1">
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row gap-4 items-center">
+          <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input type="text" placeholder="Search by name, city or License ID..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none" />
+            <input 
+              type="text" 
+              placeholder="Search by name, ID, region, or contact..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-all" 
+            />
           </div>
-          <button className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all">
-            <Filter className="w-4 h-4" />
-            <span>Filter By Region</span>
-          </button>
+          <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+            <select 
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 outline-none"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Active">Active</option>
+              <option value="Suspended">Suspended</option>
+              <option value="Expired">Expired</option>
+            </select>
+            {user?.role !== 'regional_director' && (
+              <select 
+                value={filterRegion}
+                onChange={(e) => setFilterRegion(e.target.value)}
+                className="px-3 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 outline-none"
+              >
+                <option value="All">All Regions</option>
+                <option value="Maroodi Jeex">Maroodi Jeex</option>
+                <option value="Togdheer">Togdheer</option>
+                <option value="Sanaag">Sanaag</option>
+                <option value="Awdal">Awdal</option>
+                <option value="Sool">Sool</option>
+                <option value="Saaxil">Saaxil</option>
+              </select>
+            )}
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -182,7 +234,7 @@ export default function AgenciesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {agencies.map((agency) => (
+              {filteredAgencies.map((agency) => (
                 <tr key={agency.id} className="hover:bg-slate-50 transition-colors group">
                   <td className="px-6 py-4">
                     <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-100 uppercase tracking-tight">
