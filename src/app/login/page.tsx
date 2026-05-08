@@ -26,17 +26,12 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    // Give a small delay to simulate server check
-    setTimeout(() => {
-      const success = login(email, password);
-      
-      if (success) {
-        router.push('/dashboard');
-      } else {
-        setError('Invalid email or password. Please try again.');
-        setLoading(false);
-      }
-    }, 800);
+    const result = await login(email, password);
+    
+    if (!result.success) {
+      setError(result.error || 'Invalid email or password. Please try again.');
+      setLoading(false);
+    }
   };
 
   return (

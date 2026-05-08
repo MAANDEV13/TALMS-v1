@@ -75,6 +75,7 @@ export default function ApprovalsPage() {
           createdAt: new Date().toISOString(),
           issueDate: formattedIssueDate,
           expiryDate: formattedExpiryDate,
+          registeredBy: selectedApp.registeredBy || `${selectedApp.region || 'HQ'}-officer`,
           printCount: 0
         };
         MOCK_DB.save('agencies', [newAgency, ...agencies]);

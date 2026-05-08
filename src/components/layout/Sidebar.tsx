@@ -38,7 +38,7 @@ const sidebarItems: SidebarItem[] = [
   { icon: FileCheck, label: 'Approvals', href: '/approvals', roles: ['director', 'general_director'] },
   { icon: DollarSign, label: 'Fines', href: '/fines', roles: ['director'] },
   { icon: History, label: 'Activity Logs', href: '/activities', roles: ['admin', 'general_director'] },
-  { icon: Activity, label: 'Reports', href: '/reports', roles: ['admin', 'minister', 'director'] },
+  { icon: Activity, label: 'Reports', href: '/reports', roles: ['admin', 'minister', 'director', 'general_director', 'officer', 'regional_director'] },
   { icon: Users, label: 'User Management', href: '/users', roles: ['admin'] },
   { icon: Bell, label: 'Notifications', href: '/notifications' },
   { icon: Settings, label: 'Settings', href: '/settings' },

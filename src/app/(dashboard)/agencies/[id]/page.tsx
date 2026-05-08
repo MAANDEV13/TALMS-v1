@@ -18,7 +18,9 @@ import {
   History,
   Download,
   Edit2,
-  Eye
+  Eye,
+  Clock,
+  ArrowRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -91,14 +93,105 @@ export default function AgencyDetailPage() {
                 MOCK_DB.save('agencies', all.map((a: any) => a.id === id ? updated : a));
                 MOCK_DB.logActivity(user.name, 'Printed agency status report for', agency.name);
               }
-              window.print();
+              // Clean print: open a new window with only important details
+              const printWindow = window.open('', '_blank', 'width=700,height=900');
+              if (printWindow) {
+                printWindow.document.write(`
+                  <html><head><title>Agency Status - ${agency.name}</title>
+                  <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&display=swap');
+                    body { font-family: 'Montserrat', sans-serif; padding: 40px; color: #0f172a; }
+                    h1 { font-size: 22px; font-weight: 900; text-transform: uppercase; margin-bottom: 4px; }
+                    h2 { font-size: 14px; color: #1e40af; font-weight: 700; margin-bottom: 30px; }
+                    .logo-header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #1e40af; padding-bottom: 20px; }
+                    .logo-header img { width: 100px; margin-bottom: 10px; }
+                    .logo-header p { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                    th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 800; padding: 10px 12px; border-bottom: 2px solid #e2e8f0; }
+                    td { padding: 12px; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
+                    td.label { font-weight: 700; color: #475569; width: 40%; }
+                    td.value { font-weight: 600; color: #0f172a; }
+                    .status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+                    .status.active { background: #dcfce7; color: #15803d; }
+                    .status.expired { background: #fee2e2; color: #dc2626; }
+                    .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #e2e8f0; text-align: center; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+                    @media print { body { padding: 20px; } }
+                  </style></head><body>
+                  <div class="logo-header">
+                    <img src="/logo.png" alt="Logo" />
+                    <h1>Agency Status Report</h1>
+                    <p>Ministry of Civil Aviation & Airport's Development</p>
+                  </div>
+                  <table>
+                    <tr><th colspan="2">Agency Details</th></tr>
+                    <tr><td class="label">Agency Name</td><td class="value">${agency.name}</td></tr>
+                    <tr><td class="label">License ID</td><td class="value">${agency.licenseId || 'N/A'}</td></tr>
+                    <tr><td class="label">Status</td><td class="value"><span class="status ${agency.status === 'Active' ? 'active' : 'expired'}">${agency.status}</span></td></tr>
+                    <tr><td class="label">Region</td><td class="value">${agency.region || 'N/A'}</td></tr>
+                    <tr><td class="label">District / City</td><td class="value">${agency.city || 'N/A'}</td></tr>
+                    <tr><th colspan="2" style="padding-top:24px">Contact Information</th></tr>
+                    <tr><td class="label">Contact Person</td><td class="value">${agency.contactPerson || 'N/A'}</td></tr>
+                    <tr><td class="label">Phone</td><td class="value">${agency.phone || 'N/A'}</td></tr>
+                    <tr><td class="label">Email</td><td class="value">${agency.email || 'N/A'}</td></tr>
+                    <tr><th colspan="2" style="padding-top:24px">License Dates</th></tr>
+                    <tr><td class="label">Issue Date</td><td class="value">${agency.issueDate || 'Not Issued'}</td></tr>
+                    <tr><td class="label">Expiry Date</td><td class="value">${agency.expiryDate || 'Not Issued'}</td></tr>
+                    <tr><td class="label">Print Count</td><td class="value">${agency.printCount || 0} time(s)</td></tr>
+                  </table>
+                  <div class="footer">Printed on ${new Date().toLocaleDateString()} — TALMS Official Report</div>
+                  </body></html>
+                `);
+                printWindow.document.close();
+                setTimeout(() => printWindow.print(), 500);
+              }
             }}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all"
           >
             <Printer className="w-4 h-4" />
             Print Status
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all">
+          <button 
+            onClick={() => {
+              // Export agency data as JSON file
+              const exportData = {
+                name: agency.name,
+                licenseId: agency.licenseId,
+                status: agency.status,
+                region: agency.region,
+                city: agency.city,
+                contactPerson: agency.contactPerson,
+                phone: agency.phone,
+                email: agency.email,
+                issueDate: agency.issueDate,
+                expiryDate: agency.expiryDate,
+                registeredBy: agency.registeredBy || 'N/A',
+                documents: agency.docs || [],
+                exportedAt: new Date().toISOString()
+              };
+              const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `${agency.name.replace(/\s+/g, '_')}_export.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+
+              // Export any stored doc files
+              if (agency.docFileData) {
+                Object.entries(agency.docFileData).forEach(([docName, base64]: [string, any]) => {
+                  try {
+                    const link = document.createElement('a');
+                    link.href = base64;
+                    link.download = docName.replace(/\s+/g, '_') + '.pdf';
+                    link.click();
+                  } catch (e) { /* skip invalid data */ }
+                });
+              }
+
+              MOCK_DB.logActivity(user?.name || 'User', 'Exported agency data for', agency.name);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all"
+          >
             <Download className="w-4 h-4" />
             Export Data
           </button>
@@ -336,20 +429,78 @@ export default function AgencyDetailPage() {
         </div>
       )}
 
-      {activeTab === 'history' && (
-        <div className="bg-white p-20 rounded-3xl border border-slate-100 shadow-sm text-center space-y-6">
-           <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto border border-slate-100 shadow-inner">
-              <History className="w-10 h-10 text-slate-300" />
-           </div>
-           <div>
-              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Compliance History</h3>
-              <p className="text-sm text-slate-500 max-w-sm mx-auto mt-2 font-medium">Detailed logs of all regulatory interactions, inspections, and license renewals will be archived here.</p>
-           </div>
-           <button className="px-6 py-2.5 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all text-xs uppercase tracking-widest">
-              Refresh Audit Logs
-           </button>
-        </div>
-      )}
+      {activeTab === 'history' && (() => {
+        const allActivities = MOCK_DB.get('activities') || [];
+        const agencyLogs = allActivities.filter((a: any) => 
+          (a.target || '').toLowerCase().includes(agency.name.toLowerCase())
+        );
+        return (
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Compliance History</h3>
+                <p className="text-sm text-slate-500 mt-1">All activity logs related to {agency.name}.</p>
+              </div>
+              <span className="bg-blue-100 text-blue-700 text-[10px] font-black px-2.5 py-1 rounded-lg uppercase">
+                {agencyLogs.length} Records
+              </span>
+            </div>
+            {agencyLogs.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-50 bg-slate-50/30">
+                      <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Administrator</th>
+                      <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Action Taken</th>
+                      <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest text-right">Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {agencyLogs.map((log: any) => (
+                      <tr key={log.id} className="hover:bg-slate-50 transition-colors group">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 group-hover:bg-blue-50 group-hover:border-blue-100 transition-all">
+                              <User className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-slate-900">{log.user}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Authorized Session</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-black text-slate-700">{log.action}</span>
+                            <ArrowRight className="w-3 h-3 text-slate-300" />
+                            <span className="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{log.target}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex flex-col items-end">
+                            <div className="flex items-center gap-1.5 text-slate-900 font-black text-sm">
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              {log.time}
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">{log.date}</p>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-20 text-center space-y-4">
+                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto border border-slate-100">
+                  <History className="w-8 h-8 text-slate-300" />
+                </div>
+                <p className="text-slate-400 font-medium">No activity logs found for this agency yet.</p>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

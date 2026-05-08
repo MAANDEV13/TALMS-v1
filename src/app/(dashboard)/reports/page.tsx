@@ -27,9 +27,22 @@ export default function ReportsPage() {
 
   useEffect(() => {
     MOCK_DB.init();
-    const agencies = MOCK_DB.get('agencies');
-    const apps = MOCK_DB.get('applications');
+    let agencies = MOCK_DB.get('agencies');
+    let apps = MOCK_DB.get('applications');
     const fines = MOCK_DB.get('fines') || [];
+
+    // Role-based data filtering
+    // Regional directors only see their own region
+    if (user?.role === 'regional_director' && user.region) {
+      agencies = agencies.filter((a: any) => a.region === user.region);
+      apps = apps.filter((a: any) => a.region === user.region);
+    }
+
+    // Officers see their assigned region if they have one
+    if (user?.role === 'officer' && user.region) {
+      agencies = agencies.filter((a: any) => a.region === user.region);
+      apps = apps.filter((a: any) => a.region === user.region);
+    }
 
     // Calculate revenue
     const fineRevenue = fines.reduce((acc: number, f: any) => acc + (parseFloat(f.amount) || 0), 0);
@@ -47,29 +60,60 @@ export default function ReportsPage() {
     setRevenue(licenseRevenue + fineRevenue);
 
     // Calculate regional density
-    const regions = ['Maroodi Jeex', 'Togdheer', 'Awdal', 'Sahil', 'Sool', 'Sanaag'];
+    const regions = ['Maroodi Jeex', 'Togdheer', 'Awdal', 'Saaxil', 'Sool', 'Sanaag', 'Gabiley'];
+    const allAgencies = MOCK_DB.get('agencies');
     const density = regions.map(r => ({
       region: r,
-      count: agencies.filter((a: any) => a.region === r).length,
-      color: r === 'Maroodi Jeex' ? 'blue' : r === 'Togdheer' ? 'indigo' : 'slate'
+      count: allAgencies.filter((a: any) => a.region === r).length,
+      color: r === 'Maroodi Jeex' ? 'blue' : r === 'Togdheer' ? 'indigo' : r === 'Gabiley' ? 'green' : 'slate'
     }));
-    setRegionalDensity(density);
-  }, []);
 
-  if (!stats) return <div className="p-20 text-center">Loading Ministerial Reports...</div>;
+    // For regional roles, highlight their own region
+    if (user?.role === 'regional_director' && user.region) {
+      setRegionalDensity(density.filter(d => d.region === user.region));
+    } else {
+      setRegionalDensity(density);
+    }
+  }, [user]);
+
+  if (!stats) return <div className="p-20 text-center">Loading Reports...</div>;
+
+  const isRegionalView = user?.role === 'regional_director' || (user?.role === 'officer' && user?.region);
+  const totalApps = stats.newApps + stats.renewalApps;
+  const newPct = totalApps > 0 ? Math.round((stats.newApps / totalApps) * 100) : 0;
+  const renewalPct = totalApps > 0 ? Math.round((stats.renewalApps / totalApps) * 100) : 0;
 
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Ministerial Analytics</h1>
-          <p className="text-slate-500 mt-1">Strategic oversight and performance reporting for travel agency licensing.</p>
+          <h1 className="text-3xl font-bold text-slate-900">
+            {isRegionalView ? `${user?.region || 'Regional'} Reports` : 'Ministerial Analytics'}
+          </h1>
+          <p className="text-slate-500 mt-1">
+            {isRegionalView
+              ? `Performance overview for the ${user?.region || ''} region.`
+              : 'Strategic oversight and performance reporting for travel agency licensing.'}
+          </p>
         </div>
         <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all">
           <Download className="w-4 h-4" />
           Export PDF Report
         </button>
       </div>
+
+      {/* Regional Officer Notice */}
+      {isRegionalView && (
+        <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-sm font-bold text-blue-900 uppercase tracking-tight">Regional View Active</h4>
+            <p className="text-xs text-blue-700 font-medium mt-0.5">
+              You are viewing data filtered to <span className="font-black">{user?.region}</span> only. Main officers and directors can see all regions.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* High Level Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -104,19 +148,19 @@ export default function ReportsPage() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm font-bold">
                 <span className="text-slate-600 uppercase tracking-wider">New Registrations</span>
-                <span className="text-blue-600">{Math.round((stats.newApps / (stats.newApps + stats.renewalApps)) * 100)}%</span>
+                <span className="text-blue-600">{newPct}%</span>
               </div>
               <div className="h-3 bg-slate-50 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-600 rounded-full" style={{ width: `${(stats.newApps / (stats.newApps + stats.renewalApps)) * 100}%` }}></div>
+                <div className="h-full bg-blue-600 rounded-full" style={{ width: `${newPct}%` }}></div>
               </div>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between text-sm font-bold">
                 <span className="text-slate-600 uppercase tracking-wider">Renewals</span>
-                <span className="text-amber-600">{Math.round((stats.renewalApps / (stats.newApps + stats.renewalApps)) * 100)}%</span>
+                <span className="text-amber-600">{renewalPct}%</span>
               </div>
               <div className="h-3 bg-slate-50 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-500 rounded-full" style={{ width: `${(stats.renewalApps / (stats.newApps + stats.renewalApps)) * 100}%` }}></div>
+                <div className="h-full bg-amber-500 rounded-full" style={{ width: `${renewalPct}%` }}></div>
               </div>
             </div>
           </div>
@@ -150,7 +194,7 @@ export default function ReportsPage() {
           <div className="mt-8 pt-8 border-t border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase">
               <Users className="w-4 h-4" />
-              Primary Focus: Maroodi Jeex
+              {isRegionalView ? `Showing: ${user?.region}` : 'Primary Focus: Maroodi Jeex'}
             </div>
             <button className="text-xs font-black text-blue-600 uppercase tracking-widest hover:underline">View Map View</button>
           </div>

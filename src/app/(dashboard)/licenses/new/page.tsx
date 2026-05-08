@@ -127,11 +127,12 @@ function NewApplicationPageContent() {
   }, [user, router, draftId, type, selectedAgency]);
 
   const somalilandRegionsData: Record<string, string[]> = {
-    'Maroodi Jeex': ['Hargeisa', 'Gabilay', 'Baligubadle', 'Salaxlay', 'Faraweyne', 'Sabawanaag', 'Caddaadlay', 'Daarasalaam', 'Allaybaday', 'Dacar Budhuq'],
+    'Maroodi Jeex': ['Hargeisa', 'Baligubadle', 'Salaxlay', 'Faraweyne', 'Sabawanaag', 'Caddaadlay', 'Daarasalaam', 'Allaybaday', 'Dacar Budhuq'],
     'Togdheer': ['Burco', 'Oodwayne', 'Buuhoodle', 'Duruqsi', 'Sh. Xasan Geelle', 'Qoryaale'],
     'Sanaag': ['Ceerigaabo', 'Ceel-af-weyn', 'Badhan', 'Laas-qoray', 'Dhahar', 'Gar-adag', 'Maydh', 'Darar-weyne', 'Fiqi-fulliye', 'Xiis'],
     'Awdal': ['Boorama', 'Baki', 'Saylac', 'Lughaya', 'Dilla'],
     'Sool': ['Laascaanood', 'Caynabo', 'Taleex', 'Xuddun', 'Boocane', 'Yagoori'],
+    'Gabiley': ['Gabiley'],
     'Saaxil': ['Berbera', 'Sheekh', 'Ma-dheera', 'Bulaxaar', 'Xaggal']
   };
   const somalilandRegions = Object.keys(somalilandRegionsData);
@@ -287,6 +288,7 @@ function NewApplicationPageContent() {
         uploadedDocs: uploadedDocs,
         docFileNames: docFileNames,
         docFileData: docFileData,
+        registeredBy: `${region || 'HQ'}-${(user?.role || 'officer').replace('_', ' ')}`,
         date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       };
 

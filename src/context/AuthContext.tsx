@@ -1,78 +1,110 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { MOCK_DB } from '@/lib/mockDb';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 
 export type UserRole = 'admin' | 'officer' | 'regional_director' | 'director' | 'general_director' | 'minister';
 
 interface User {
   id: string;
-  email: string;
   name: string;
+  email: string;
   role: UserRole;
   region?: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => boolean;
-  logout: () => void;
-  isLoading: boolean;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  loading: true,
+  login: async () => ({ success: false }),
+  logout: async () => {},
+  refreshUser: async () => {},
+});
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
 
-  useEffect(() => {
-    // Initialize Mock DB
-    MOCK_DB.init();
+  const publicPaths = ['/login', '/accept-invite'];
 
-    // Check local storage for session
-    const savedUser = localStorage.getItem('talms_session');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await fetch('/api/auth/me');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setUser(data.user);
+          return;
+        }
+      }
+      setUser(null);
+    } catch {
+      setUser(null);
+    } finally {
+      setLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
-  const login = (email: string, password: string): boolean => {
-    const users = MOCK_DB.get('users');
-    const foundUser = users.find((u: any) => u.email === email && u.password === password);
+  useEffect(() => {
+    refreshUser();
+  }, [refreshUser]);
 
-    if (foundUser) {
-      const sessionUser: User = {
-        id: foundUser.id,
-        email: foundUser.email,
-        name: foundUser.name,
-        role: foundUser.role,
-        region: foundUser.region,
-      };
-      setUser(sessionUser);
-      localStorage.setItem('talms_session', JSON.stringify(sessionUser));
-      return true;
+  // Redirect logic
+  useEffect(() => {
+    if (loading) return;
+
+    const isPublic = publicPaths.some(p => pathname?.startsWith(p));
+
+    if (!user && !isPublic) {
+      router.push('/login');
     }
-    return false;
+  }, [user, loading, pathname, router]);
+
+  const login = async (email: string, password: string) => {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setUser(data.user);
+        router.push('/dashboard');
+        return { success: true };
+      }
+
+      return { success: false, error: data.error || 'Login failed' };
+    } catch (error: any) {
+      return { success: false, error: 'Network error. Please try again.' };
+    }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch { /* ignore */ }
     setUser(null);
-    localStorage.removeItem('talms_session');
+    router.push('/login');
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}
+export const useAuth = () => useContext(AuthContext);

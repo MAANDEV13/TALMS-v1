@@ -46,7 +46,7 @@ export default function PrintLicensePage() {
 
   const licenseId = app.agencyId || `${app.id.toString().padStart(3, '0')}-MOCAAD-DCA/2026`;
   const qrData = encodeURIComponent(
-    `Ministry of Civil Aviation Somaliland\nAgency: ${app.agency}\nLicense ID: ${licenseId}\nIssue Date: ${todayDate}\nExpiry Date: ${expiryDate}\nStatus: VALID`
+    `Ministry of Civil Aviation Somaliland\nAgency: ${app.agency}\nLicense ID: ${licenseId}\nIssue Date: ${todayDate}\nExpiry Date: ${expiryDate}`
   );
 
   return (
@@ -263,10 +263,13 @@ export default function PrintLicensePage() {
         }
 
         .ref-number {
-          font-size: 8.5pt;
-          color: #ef4444;
+          font-size: 7.5pt;
+          color: #1e40af;
           font-weight: 900;
           text-transform: uppercase;
+          white-space: nowrap;
+          letter-spacing: -0.3px;
+          line-height: 1;
         }
       `}</style>
 

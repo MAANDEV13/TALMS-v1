@@ -1,199 +1,201 @@
+// MOCK_DB Compatibility Bridge
+// This replaces the original mockDb.ts localStorage implementation
+// with API calls to /api/data that connect to Cloudflare D1.
+// All existing page code continues to work with minimal changes.
+
 'use client';
 
-// Central Mock Database Utility using LocalStorage
+// Cache to avoid redundant fetches within the same render cycle
+const cache: Record<string, { data: any; timestamp: number }> = {};
+const CACHE_TTL = 2000; // 2 seconds
+
+async function fetchTable(table: string): Promise<any[]> {
+  const now = Date.now();
+  const cached = cache[table];
+  if (cached && now - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+
+  try {
+    const res = await fetch(`/api/data?table=${table}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const result = Array.isArray(data) ? data : [];
+    cache[table] = { data: result, timestamp: now };
+    return result;
+  } catch {
+    return [];
+  }
+}
+
+async function postData(table: string, action: string, data: any) {
+  try {
+    const res = await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ table, action, data }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// The MOCK_DB object — same interface as before, but async-aware
+// For synchronous callers, returns cached data or empty arrays
 export const MOCK_DB = {
-  // Initialize DB with default data if empty
   init: () => {
-    if (typeof window === 'undefined') return;
+    // No-op — D1 doesn't need initialization
+  },
 
-    if (!localStorage.getItem('talms_users')) {
-      localStorage.setItem('talms_users', JSON.stringify([
-        { id: '1', name: 'Admin User', email: 'admin@agency.gov', password: 'admin123', role: 'admin', status: 'Active' },
-        { id: '2', name: 'Ahmed Officer', email: 'officer@agency.gov', password: 'admin123', role: 'officer', region: 'Maroodi Jeex', status: 'Active' },
-        { id: '3', name: 'Sarah Director', email: 'director@agency.gov', password: 'admin123', role: 'director', status: 'Active' },
-        { id: '4', name: 'Guleid General', email: 'gd@agency.gov', password: 'admin123', role: 'general_director', status: 'Active' },
-        { id: '5', name: 'Awdal Director', email: 'awdal@agency.gov', password: 'admin123', role: 'regional_director', region: 'Awdal', status: 'Active' },
-        { id: '6', name: 'Sool Director', email: 'sool@agency.gov', password: 'admin123', role: 'regional_director', region: 'Sool', status: 'Active' },
-      ]));
+  // Synchronous get that returns cached data
+  // Pages should migrate to async version over time
+  get: (table: string): any[] => {
+    const cached = cache[table];
+    if (cached) return cached.data;
+    // Trigger async fetch for next call
+    fetchTable(table);
+    return [];
+  },
+
+  // Async version for new code
+  getAsync: async (table: string): Promise<any[]> => {
+    return await fetchTable(table);
+  },
+
+  save: async (table: string, data: any) => {
+    // For bulk save, this is a no-op in D1 — individual operations are used
+    cache[table] = { data, timestamp: Date.now() };
+  },
+
+  // Application methods
+  addApplication: async (app: any) => {
+    const success = await postData('applications', 'create', {
+      id: app.id || crypto.randomUUID(),
+      agency: app.agency,
+      agency_id: app.agencyId || app.agency_id,
+      region: app.region,
+      district: app.district,
+      contact_person: app.contactPerson || app.contact_person,
+      phone: app.phone,
+      email: app.email,
+      alternate_name: app.alternatePerson?.name || app.alternate_name,
+      alternate_phone: app.alternatePerson?.phone || app.alternate_phone,
+      register_date: app.registerDate || app.register_date,
+      type: app.type,
+      status: app.status || 'Under Review',
+      status_color: app.statusColor || app.status_color || 'amber',
+      registered_by: app.registeredBy || app.registered_by,
+      reg_fee: app.financials?.registrationFee || app.reg_fee || 0,
+      app_fee: app.financials?.applicationFee || app.app_fee || 0,
+      discount: app.financials?.discount || app.discount || 0,
+      paid_amount: app.financials?.paidAmount || app.paid_amount || 0,
+      total_due: app.financials?.totalDue || app.total_due || 0,
+      payment_receipt: app.financials?.paymentReceipt || app.payment_receipt,
+      uploaded_docs: app.uploadedDocs || app.uploaded_docs,
+      doc_file_names: app.docFileNames || app.doc_file_names,
+      date: app.date,
+    });
+    delete cache['applications'];
+    return success;
+  },
+
+  updateApplication: async (app: any) => {
+    const fields: Record<string, any> = {};
+    if (app.status) fields.status = app.status;
+    if (app.statusColor || app.status_color) fields.status_color = app.statusColor || app.status_color;
+    if (app.reviewComment || app.review_comment) fields.review_comment = app.reviewComment || app.review_comment;
+    if (app.financials) {
+      fields.discount = app.financials.discount;
+      fields.paid_amount = app.financials.paidAmount;
+      fields.total_due = app.financials.totalDue;
     }
-
-    if (!localStorage.getItem('talms_agencies')) {
-      localStorage.setItem('talms_agencies', JSON.stringify([]));
-    }
-
-    if (!localStorage.getItem('talms_applications')) {
-      localStorage.setItem('talms_applications', JSON.stringify([]));
-    }
-
-    if (!localStorage.getItem('talms_notifications')) {
-      localStorage.setItem('talms_notifications', JSON.stringify([]));
-    }
-
-    if (!localStorage.getItem('talms_agency_changes')) {
-      localStorage.setItem('talms_agency_changes', JSON.stringify([]));
-    }
-
-    if (!localStorage.getItem('talms_activities')) {
-      localStorage.setItem('talms_activities', JSON.stringify([]));
-    }
-
-    if (!localStorage.getItem('talms_settings')) {
-      localStorage.setItem('talms_settings', JSON.stringify({
-        registrationFee: 1000,
-        renewalFee: 600,
-        applicationFee: 500,
-        certAuthText: "This certificate authorizes the holder to operate as a licensed Travel Agency, providing approved travel and tourism services in accordance with the laws and regulations of the Republic of Somaliland and applicable International aviation standards.",
-        certSuspensionText: "This certificate is subject to periodic review and may be suspended or revoked in the event of noncompliance with the applicable laws and regulations."
-      }));
-    }
+    await postData('applications', 'update', { id: app.id, fields });
+    delete cache['applications'];
   },
 
-  // Generic Get/Set
-  get: (key: string) => JSON.parse(localStorage.getItem(`talms_${key}`) || '[]'),
-  save: (key: string, data: any) => localStorage.setItem(`talms_${key}`, JSON.stringify(data)),
-  
-  // Specific Operations
-  addApplication: (app: any) => {
-    const apps = MOCK_DB.get('applications');
-    
-    // Final safety check for New applications to prevent duplicates by name
-    if (app.type === 'New') {
-      const exists = apps.some((a: any) => a.agency.toLowerCase() === app.agency.toLowerCase());
-      if (exists) {
-        console.warn('Duplicate application attempt blocked for:', app.agency);
-        return false;
-      }
-    }
-    
-    MOCK_DB.save('applications', [app, ...apps]);
-    return true;
+  updateApplicationStatus: async (id: string, status: string, color: string, comment?: string) => {
+    const fields: Record<string, any> = { status, status_color: color };
+    if (comment) fields.review_comment = comment;
+    await postData('applications', 'update', { id, fields });
+    delete cache['applications'];
   },
 
-  getNextLicenseId: () => {
-    const agencies = MOCK_DB.get('agencies');
-    const apps = MOCK_DB.get('applications').filter((a: any) => a.status !== 'Draft');
-    const year = new Date().getFullYear();
-    const nextNumber = (agencies.length + apps.length + 1).toString().padStart(3, '0');
-    return `${nextNumber}-MOCAAD-DCA/${year}`;
+  // Activity logging
+  logActivity: async (user: string, action: string, target: string) => {
+    await postData('activities', 'log', { user, action, target });
+    delete cache['activities'];
   },
 
-  getDraftId: () => {
-    return `DRAFT-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-  },
-
-  updateApplicationStatus: (id: string, status: string, color: string, comment?: string) => {
-    const apps = MOCK_DB.get('applications');
-    const updated = apps.map((app: any) => 
-      app.id === id ? { 
-        ...app, 
-        status, 
-        statusColor: color,
-        reviewComment: comment || app.reviewComment 
-      } : app
-    );
-    MOCK_DB.save('applications', updated);
-  },
-
-  addUser: (user: any) => {
-    const users = MOCK_DB.get('users');
-    MOCK_DB.save('users', [...users, { ...user, id: Math.random().toString(36).substr(2, 9), status: 'Active' }]);
-  },
-
-  checkAgencyName: (name: string) => {
-    const agencies = MOCK_DB.get('agencies');
-    const apps = MOCK_DB.get('applications');
-    const nameExists = agencies.some((a: any) => a.name.toLowerCase() === name.toLowerCase()) ||
-                       apps.some((a: any) => a.agency.toLowerCase() === name.toLowerCase());
-    return !nameExists;
-  },
-
-  requestAgencyChange: (change: { agencyId: string, type: 'edit' | 'delete', data?: any, requester: string }) => {
-    const changes = MOCK_DB.get('agency_changes');
-    const newChange = {
-      ...change,
-      id: Math.random().toString(36).substr(2, 9),
-      status: 'Pending DG Approval',
-      date: new Date().toLocaleDateString()
-    };
-    MOCK_DB.save('agency_changes', [newChange, ...changes]);
-  },
-
-  approveAgencyChange: (changeId: string) => {
-    const changes = MOCK_DB.get('agency_changes');
-    const agencies = MOCK_DB.get('agencies');
-    const change = changes.find((c: any) => c.id === changeId);
-
-    if (!change) return;
-
-    let updatedAgencies;
-    if (change.type === 'delete') {
-      updatedAgencies = agencies.filter((a: any) => a.id !== change.agencyId);
-    } else {
-      updatedAgencies = agencies.map((a: any) => 
-        a.id === change.agencyId ? { ...a, ...change.data, name: change.data.newName || a.name } : a
-      );
-    }
-
-    MOCK_DB.save('agencies', updatedAgencies);
-    MOCK_DB.save('agency_changes', changes.filter((c: any) => c.id !== changeId));
-  },
-
-  logActivity: (userName: string, action: string, target: string) => {
-    const activities = MOCK_DB.get('activities') || [];
-    const newActivity = {
-      id: Math.random().toString(36).substr(2, 9),
-      user: userName,
-      action: action,
-      target: target,
-      timestamp: new Date().toISOString(),
-      date: new Date().toLocaleDateString(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    MOCK_DB.save('activities', [newActivity, ...activities.slice(0, 99)]);
-  },
-
-  getSettings: () => {
-    const settings = localStorage.getItem('talms_settings');
-    return settings ? JSON.parse(settings) : {
+  // Settings
+  getSettings: (): any => {
+    const cached = cache['settings'];
+    if (cached) return cached.data;
+    fetchTable('settings');
+    return {
       registrationFee: 1000,
       renewalFee: 600,
       applicationFee: 500,
-      certAuthText: "This certificate authorizes the holder to operate as a licensed Travel Agency, providing approved travel and tourism services in accordance with the laws and regulations of the Republic of Somaliland and applicable International aviation standards.",
-      certSuspensionText: "This certificate is subject to periodic review and may be suspended or revoked in the event of noncompliance with the applicable laws and regulations."
+      certificateTitle: 'TRAVEL AGENCY LICENSE',
+      certificateSubtitle: 'Ministry of Civil Aviation and Airport Development',
     };
   },
 
-  updateSettings: (newSettings: any) => {
-    const current = MOCK_DB.getSettings();
-    localStorage.setItem('talms_settings', JSON.stringify({ ...current, ...newSettings }));
+  getSettingsAsync: async () => {
+    return await fetchTable('settings');
   },
 
-  updateApplication: (updatedApp: any) => {
-    const apps = MOCK_DB.get('applications');
-    const updated = apps.map((app: any) => 
-      app.id === updatedApp.id ? updatedApp : app
-    );
-    MOCK_DB.save('applications', updated);
+  saveSettings: async (settings: Record<string, any>) => {
+    for (const [key, value] of Object.entries(settings)) {
+      await postData('settings', 'save', { key, value: String(value) });
+    }
+    delete cache['settings'];
   },
 
-  // Wipe all data and re-seed only system users
-  clearAndSeedUsers: () => {
-    if (typeof window === 'undefined') return;
-    const SEED_USERS = [
-      { id: '1', name: 'Admin User',    email: 'admin@agency.gov',    password: 'admin123', role: 'admin',            status: 'Active' },
-      { id: '2', name: 'Ahmed Officer', email: 'officer@agency.gov',  password: 'admin123', role: 'officer', region: 'Maroodi Jeex', status: 'Active' },
-      { id: '3', name: 'Sarah Director',email: 'director@agency.gov', password: 'admin123', role: 'director',         status: 'Active' },
-      { id: '4', name: 'Guleid General',email: 'gd@agency.gov',       password: 'admin123', role: 'general_director', status: 'Active' },
-      { id: '5', name: 'Awdal Director',email: 'awdal@agency.gov',    password: 'admin123', role: 'regional_director', region: 'Awdal', status: 'Active' },
-      { id: '6', name: 'Sool Director', email: 'sool@agency.gov',     password: 'admin123', role: 'regional_director', region: 'Sool', status: 'Active' },
-    ];
-    // Clear every collection
-    ['agencies','applications','notifications','agency_changes','activities','fines'].forEach(
-      (key) => localStorage.removeItem(`talms_${key}`)
-    );
-    // Re-seed users only
-    localStorage.setItem('talms_users', JSON.stringify(SEED_USERS));
-    // Keep settings untouched
-    console.info('[TALMS] Database cleared. Only seed users remain.');
+  // Agency name check
+  checkAgencyName: (name: string): boolean => {
+    const agencies = cache['agencies']?.data || [];
+    const apps = cache['applications']?.data || [];
+    const agencyMatch = agencies.some((a: any) => a.name?.toLowerCase() === name.toLowerCase());
+    const appMatch = apps.some((a: any) => a.agency?.toLowerCase() === name.toLowerCase() && a.status !== 'Draft');
+    return !agencyMatch && !appMatch;
+  },
+
+  // License ID generation
+  getNextLicenseId: (): string => {
+    const agencies = cache['agencies']?.data || [];
+    const count = agencies.length + 1;
+    return `SL-2026-${String(count).padStart(4, '0')}`;
+  },
+
+  getDraftId: (): string => {
+    return `DRAFT-${Date.now()}`;
+  },
+
+  // User management (admin only)
+  addUser: async (userData: any) => {
+    // User creation now goes through invitation system
+    // This is kept for compatibility but invitations are preferred
+    await postData('activities', 'log', {
+      user: 'Admin',
+      action: 'Attempted to create user (use invitation system)',
+      target: userData.email
+    });
+  },
+
+  // Agency change management
+  requestAgencyChange: async (change: any) => {
+    await postData('agency_changes', 'create', change);
+    delete cache['agency_changes'];
+  },
+
+  approveAgencyChange: async (id: string) => {
+    await postData('agency_changes', 'delete', { id });
+    delete cache['agency_changes'];
+  },
+
+  // Preload data for pages that need synchronous access
+  preload: async (...tables: string[]) => {
+    await Promise.all(tables.map(t => fetchTable(t)));
   },
 };

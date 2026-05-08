@@ -216,6 +216,7 @@ export default function AgenciesPage() {
                 <option value="Sanaag">Sanaag</option>
                 <option value="Awdal">Awdal</option>
                 <option value="Sool">Sool</option>
+                <option value="Gabiley">Gabiley</option>
                 <option value="Saaxil">Saaxil</option>
               </select>
             )}
@@ -230,6 +231,9 @@ export default function AgenciesPage() {
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Agency Name</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">City</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                {(user?.role === 'officer' || user?.role === 'director' || user?.role === 'general_director') && (
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Registered By</th>
+                )}
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Action</th>
               </tr>
             </thead>
@@ -258,6 +262,13 @@ export default function AgenciesPage() {
                       {agency.status}
                     </span>
                   </td>
+                  {(user?.role === 'officer' || user?.role === 'director' || user?.role === 'general_director') && (
+                    <td className="px-6 py-4">
+                      <span className="text-xs font-bold text-slate-600 bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                        {agency.registeredBy || 'N/A'}
+                      </span>
+                    </td>
+                  )}
                   <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
                     <button 
                       onClick={() => handleRequestChange(agency.id, 'edit')}

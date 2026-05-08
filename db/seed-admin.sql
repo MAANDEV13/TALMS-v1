@@ -1,0 +1,1 @@
+INSERT INTO users (id, email, name, password_hash, role, status) VALUES ('db579f71-4870-41d4-b950-e75a8d101dfa', 'bromankah@gmail.com', 'Admin', '33dae2b6fd2fd8865249841357b1560a:9921bd5026aeab651ef83780fc961394194e82193d7bc174fece391939488010df0754321086b386e1f84b679e42a3db389b3d5bd95ccb3c8eaabc7af07ba3bb', 'admin', 'Active');
