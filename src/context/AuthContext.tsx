@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const publicPaths = ['/login'];
+  const publicPaths = ['/login', '/accept-invite', '/reset-password'];
 
   const refreshUser = useCallback(async () => {
     try {
