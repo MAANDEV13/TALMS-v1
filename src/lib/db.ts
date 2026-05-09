@@ -57,9 +57,9 @@ export async function getAgencyById(id: string) {
 
 export async function createAgency(a: any) {
   await d1Execute(
-    `INSERT INTO agencies (id, license_id, name, city, region, status, contact_person, phone, email, issue_date, expiry_date, registered_by, docs, print_count)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [a.id, a.license_id, a.name, a.city, a.region, a.status || 'Active', a.contact_person, a.phone, a.email, a.issue_date, a.expiry_date, a.registered_by, a.docs ? (typeof a.docs === 'string' ? a.docs : JSON.stringify(a.docs)) : null, a.print_count || 0]
+    `INSERT INTO agencies (id, license_id, name, city, region, status, contact_person, phone, email, issue_date, expiry_date, registered_by, docs, doc_file_data, print_count)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [a.id, a.license_id, a.name, a.city, a.region, a.status || 'Active', a.contact_person, a.phone, a.email, a.issue_date, a.expiry_date, a.registered_by, a.docs ? (typeof a.docs === 'string' ? a.docs : JSON.stringify(a.docs)) : null, a.doc_file_data ? (typeof a.doc_file_data === 'string' ? a.doc_file_data : JSON.stringify(a.doc_file_data)) : null, a.print_count || 0]
   );
 }
 

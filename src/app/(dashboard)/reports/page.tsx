@@ -13,68 +13,146 @@ import {
   Download,
   Calendar,
   CheckCircle2,
-  Users
+  Users,
+  User,
+  FileText,
+  Loader2
 } from 'lucide-react';
-import { MOCK_DB } from '@/lib/mockDb';
 import { useAuth } from '@/context/AuthContext';
 
 export default function ReportsPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<any>(null);
   const [revenue, setRevenue] = useState(0);
-
   const [regionalDensity, setRegionalDensity] = useState<any[]>([]);
+  const [userReports, setUserReports] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   useEffect(() => {
-    MOCK_DB.init();
-    let agencies = MOCK_DB.get('agencies');
-    let apps = MOCK_DB.get('applications');
-    const fines = MOCK_DB.get('fines') || [];
+    async function loadData() {
+      try {
+        const [agenciesRes, appsRes, finesRes] = await Promise.all([
+          fetch('/api/data?table=agencies'),
+          fetch('/api/data?table=applications'),
+          fetch('/api/data?table=fines')
+        ]);
 
-    // Role-based data filtering
-    // Regional directors only see their own region
-    if (user?.role === 'regional_director' && user.region) {
-      agencies = agencies.filter((a: any) => a.region === user.region);
-      apps = apps.filter((a: any) => a.region === user.region);
+        let agencies = agenciesRes.ok ? await agenciesRes.json() : [];
+        let apps = appsRes.ok ? await appsRes.json() : [];
+        const fines = finesRes.ok ? await finesRes.json() : [];
+        agencies = Array.isArray(agencies) ? agencies : [];
+        apps = Array.isArray(apps) ? apps : [];
+
+        const allAgencies = [...agencies];
+
+        // Role-based filtering
+        if ((user?.role === 'regional_director' || user?.role === 'officer') && user.region) {
+          agencies = agencies.filter((a: any) => a.region === user.region);
+          apps = apps.filter((a: any) => a.region === user.region);
+        }
+
+        const fineRevenue = (Array.isArray(fines) ? fines : []).reduce((acc: number, f: any) => acc + (parseFloat(f.amount) || 0), 0);
+        const licenseRevenue = apps.filter((a: any) => a.status === 'Approved by General Director').length * 500;
+
+        setStats({
+          totalAgencies: agencies.length,
+          activeAgencies: agencies.filter((a: any) => a.status === 'Active').length,
+          expiredAgencies: agencies.filter((a: any) => a.status === 'Expired').length,
+          pendingApps: apps.filter((a: any) => (a.status || '').includes('Review')).length,
+          newApps: apps.filter((a: any) => a.type === 'New').length,
+          renewalApps: apps.filter((a: any) => a.type === 'Renewal').length,
+          totalFines: (Array.isArray(fines) ? fines : []).length,
+        });
+        setRevenue(licenseRevenue + fineRevenue);
+
+        // Regional density
+        const regions = ['Maroodi Jeex', 'Togdheer', 'Awdal', 'Saaxil', 'Sool', 'Sanaag', 'Gabiley'];
+        const density = regions.map(r => ({
+          region: r,
+          count: allAgencies.filter((a: any) => a.region === r).length,
+          color: r === 'Maroodi Jeex' ? 'blue' : r === 'Togdheer' ? 'indigo' : r === 'Gabiley' ? 'green' : 'slate'
+        }));
+
+        if ((user?.role === 'regional_director') && user.region) {
+          setRegionalDensity(density.filter(d => d.region === user.region));
+        } else {
+          setRegionalDensity(density);
+        }
+
+        // Load user reports for admin
+        if (user?.role === 'admin') {
+          setLoadingUsers(true);
+          try {
+            const usersRes = await fetch('/api/data?table=users');
+            if (usersRes.ok) {
+              const usersData = await usersRes.json();
+              const allUsers = Array.isArray(usersData) ? usersData : [];
+              const userSummaries = allUsers.map((u: any) => {
+                const userApps = apps.filter((a: any) => a.registered_by === u.name);
+                const userAgencies = allAgencies.filter((a: any) => a.registered_by === u.name);
+                return {
+                  id: u.id,
+                  name: u.name,
+                  email: u.email,
+                  role: u.role,
+                  region: u.region,
+                  totalApps: userApps.length,
+                  totalAgencies: userAgencies.length,
+                };
+              });
+              setUserReports(userSummaries);
+            }
+          } catch { /* ignore */ }
+          setLoadingUsers(false);
+        }
+      } catch (err) {
+        console.error('Failed to load report data:', err);
+      }
     }
 
-    // Officers see their assigned region if they have one
-    if (user?.role === 'officer' && user.region) {
-      agencies = agencies.filter((a: any) => a.region === user.region);
-      apps = apps.filter((a: any) => a.region === user.region);
-    }
-
-    // Calculate revenue
-    const fineRevenue = fines.reduce((acc: number, f: any) => acc + (parseFloat(f.amount) || 0), 0);
-    const licenseRevenue = apps.filter((a: any) => a.status === 'Approved by General Director').length * 500;
-
-    setStats({
-      totalAgencies: agencies.length,
-      activeAgencies: agencies.filter((a: any) => a.status === 'Active').length,
-      expiredAgencies: agencies.filter((a: any) => a.status === 'Expired').length,
-      pendingApps: apps.filter((a: any) => a.status.includes('Review')).length,
-      newApps: apps.filter((a: any) => a.type === 'New').length,
-      renewalApps: apps.filter((a: any) => a.type === 'Renewal').length,
-      totalFines: fines.length,
-    });
-    setRevenue(licenseRevenue + fineRevenue);
-
-    // Calculate regional density
-    const regions = ['Maroodi Jeex', 'Togdheer', 'Awdal', 'Saaxil', 'Sool', 'Sanaag', 'Gabiley'];
-    const allAgencies = MOCK_DB.get('agencies');
-    const density = regions.map(r => ({
-      region: r,
-      count: allAgencies.filter((a: any) => a.region === r).length,
-      color: r === 'Maroodi Jeex' ? 'blue' : r === 'Togdheer' ? 'indigo' : r === 'Gabiley' ? 'green' : 'slate'
-    }));
-
-    // For regional roles, highlight their own region
-    if (user?.role === 'regional_director' && user.region) {
-      setRegionalDensity(density.filter(d => d.region === user.region));
-    } else {
-      setRegionalDensity(density);
-    }
+    if (user) loadData();
   }, [user]);
+
+  const exportReportCSV = () => {
+    if (!stats) return;
+    const lines = [
+      'TALMS Report Export',
+      `Generated: ${new Date().toISOString()}`,
+      `Role: ${user?.role}`,
+      '',
+      'Metric,Value',
+      `Total Agencies,${stats.totalAgencies}`,
+      `Active Agencies,${stats.activeAgencies}`,
+      `Expired Agencies,${stats.expiredAgencies}`,
+      `Pending Applications,${stats.pendingApps}`,
+      `New Applications,${stats.newApps}`,
+      `Renewal Applications,${stats.renewalApps}`,
+      `Total Fines,${stats.totalFines}`,
+      `Total Revenue,$${revenue}`,
+      '',
+      'Region,Agency Count',
+      ...regionalDensity.map(r => `${r.region},${r.count}`),
+    ];
+
+    if (userReports.length > 0) {
+      lines.push('', 'User Reports', 'Name,Role,Region,Applications,Agencies');
+      userReports.forEach(u => lines.push(`${u.name},${u.role},${u.region || 'N/A'},${u.totalApps},${u.totalAgencies}`));
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `talms-report-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'Admin', action: 'Exported analytics report as CSV', target: 'Reports' } })
+    });
+  };
 
   if (!stats) return <div className="p-20 text-center">Loading Reports...</div>;
 
@@ -84,7 +162,7 @@ export default function ReportsPage() {
   const renewalPct = totalApps > 0 ? Math.round((stats.renewalApps / totalApps) * 100) : 0;
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in pb-20">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">
@@ -96,20 +174,22 @@ export default function ReportsPage() {
               : 'Strategic oversight and performance reporting for travel agency licensing.'}
           </p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all">
+        <button
+          onClick={exportReportCSV}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-95"
+        >
           <Download className="w-4 h-4" />
-          Export PDF Report
+          Export Report CSV
         </button>
       </div>
 
-      {/* Regional Officer Notice */}
       {isRegionalView && (
         <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
           <div>
             <h4 className="text-sm font-bold text-blue-900 uppercase tracking-tight">Regional View Active</h4>
             <p className="text-xs text-blue-700 font-medium mt-0.5">
-              You are viewing data filtered to <span className="font-black">{user?.region}</span> only. Main officers and directors can see all regions.
+              You are viewing data filtered to <span className="font-black">{user?.region}</span> only.
             </p>
           </div>
         </div>
@@ -151,7 +231,7 @@ export default function ReportsPage() {
                 <span className="text-blue-600">{newPct}%</span>
               </div>
               <div className="h-3 bg-slate-50 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-600 rounded-full" style={{ width: `${newPct}%` }}></div>
+                <div className="h-full bg-blue-600 rounded-full transition-all duration-700" style={{ width: `${newPct}%` }}></div>
               </div>
             </div>
             <div className="space-y-2">
@@ -160,7 +240,7 @@ export default function ReportsPage() {
                 <span className="text-amber-600">{renewalPct}%</span>
               </div>
               <div className="h-3 bg-slate-50 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-500 rounded-full" style={{ width: `${renewalPct}%` }}></div>
+                <div className="h-full bg-amber-500 rounded-full transition-all duration-700" style={{ width: `${renewalPct}%` }}></div>
               </div>
             </div>
           </div>
@@ -168,13 +248,13 @@ export default function ReportsPage() {
             <div className="flex items-start gap-3">
               <TrendingUp className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
               <p className="text-sm font-medium text-slate-600 leading-relaxed">
-                The current trend shows a <span className="font-bold text-slate-900">12% increase</span> in new agency registrations compared to last quarter, indicating robust growth in the Somaliland travel sector.
+                The current trend shows a <span className="font-bold text-slate-900">12% increase</span> in new agency registrations compared to last quarter.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Regional Performance (Mock Data) */}
+        {/* Regional Performance */}
         <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
@@ -194,12 +274,99 @@ export default function ReportsPage() {
           <div className="mt-8 pt-8 border-t border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase">
               <Users className="w-4 h-4" />
-              {isRegionalView ? `Showing: ${user?.region}` : 'Primary Focus: Maroodi Jeex'}
+              {isRegionalView ? `Showing: ${user?.region}` : 'All Regions'}
             </div>
-            <button className="text-xs font-black text-blue-600 uppercase tracking-widest hover:underline">View Map View</button>
           </div>
         </div>
       </div>
+
+      {/* User-Specific Reports — Admin Only */}
+      {user?.role === 'admin' && (
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                <Users className="w-5 h-5 text-blue-600" />
+                User Activity Reports
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">Per-user breakdown of registrations and agency activity.</p>
+            </div>
+            {loadingUsers && <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />}
+          </div>
+          {userReports.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">User</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Role</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Region</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Applications</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Agencies</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {userReports.map((u) => (
+                    <tr key={u.id} className="hover:bg-slate-50 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center">
+                            <User className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{u.name || 'Unnamed'}</p>
+                            <p className="text-[10px] text-slate-400 font-bold">{u.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-xs font-black bg-slate-100 text-slate-600 px-2 py-1 rounded-lg uppercase">{u.role}</span>
+                      </td>
+                      <td className="px-6 py-4 text-sm font-medium text-slate-600">{u.region || '—'}</td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="text-sm font-black text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">{u.totalApps}</span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="text-sm font-black text-green-700 bg-green-50 px-2.5 py-1 rounded-lg border border-green-100">{u.totalAgencies}</span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => {
+                            const lines = [
+                              `User Report: ${u.name}`,
+                              `Email: ${u.email}`,
+                              `Role: ${u.role}`,
+                              `Region: ${u.region || 'N/A'}`,
+                              `Applications Registered: ${u.totalApps}`,
+                              `Agencies Created: ${u.totalAgencies}`,
+                              `Generated: ${new Date().toISOString()}`,
+                            ];
+                            const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `report-${(u.name || 'user').replace(/\s+/g, '_')}.txt`;
+                            link.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                          className="text-xs font-black text-blue-600 hover:underline uppercase tracking-widest"
+                        >
+                          Download
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-12 text-center text-slate-400 font-medium">
+              {loadingUsers ? 'Loading user data...' : 'No user data available.'}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Minister Note */}
       {user?.role === 'minister' && (

@@ -26,9 +26,13 @@ CREATE TABLE IF NOT EXISTS agencies (
   expiry_date TEXT,
   registered_by TEXT,
   docs TEXT,
+  doc_file_data TEXT,
   print_count INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+-- Migration for existing databases:
+-- ALTER TABLE agencies ADD COLUMN doc_file_data TEXT;
 
 CREATE TABLE IF NOT EXISTS applications (
   id TEXT PRIMARY KEY,

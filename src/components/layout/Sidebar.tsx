@@ -14,7 +14,8 @@ import {
   FileCheck,
   History,
   Activity,
-  DollarSign
+  DollarSign,
+  Upload
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -38,6 +39,7 @@ const sidebarItems: SidebarItem[] = [
   { icon: FileCheck, label: 'Approvals', href: '/approvals', roles: ['director', 'general_director'] },
   { icon: DollarSign, label: 'Fines', href: '/fines', roles: ['director'] },
   { icon: History, label: 'Activity Logs', href: '/activities', roles: ['admin', 'general_director'] },
+  { icon: Upload, label: 'Data Migration', href: '/data-migration', roles: ['admin'] },
   { icon: Activity, label: 'Reports', href: '/reports', roles: ['admin', 'minister', 'director', 'general_director', 'officer', 'regional_director'] },
   { icon: Users, label: 'User Management', href: '/users', roles: ['admin'] },
   { icon: Bell, label: 'Notifications', href: '/notifications' },

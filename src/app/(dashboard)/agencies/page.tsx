@@ -13,7 +13,8 @@ import {
   Trash2,
   AlertCircle,
   ShieldCheck,
-  CheckCircle2
+  CheckCircle2,
+  Download
 } from 'lucide-react';
 import { MOCK_DB } from '@/lib/mockDb';
 import { useAuth } from '@/context/AuthContext';
@@ -185,6 +186,46 @@ export default function AgenciesPage() {
           <h1 className="text-3xl font-bold text-slate-900">Registered Agencies</h1>
           <p className="text-slate-500 mt-1">Directory of all travel agencies registered in Somaliland.</p>
         </div>
+        {user?.role === 'admin' && (
+          <button
+            onClick={() => {
+              // Generate CSV from all agencies
+              const headers = ['License ID', 'Agency Name', 'District', 'Region', 'Status', 'Contact Person', 'Phone', 'Email', 'Issue Date', 'Expiry Date', 'Registered By', 'Created At'];
+              const rows = agencies.map((a: any) => [
+                a.license_id || a.licenseId || '',
+                a.name || '',
+                a.city || '',
+                a.region || '',
+                a.status || '',
+                a.contact_person || a.contactPerson || '',
+                a.phone || '',
+                a.email || '',
+                a.issue_date || a.issueDate || '',
+                a.expiry_date || a.expiryDate || '',
+                a.registered_by || a.registeredBy || '',
+                a.created_at || a.createdAt || '',
+              ]);
+              const csvContent = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `talms-agencies-${new Date().toISOString().split('T')[0]}.csv`;
+              link.click();
+              URL.revokeObjectURL(url);
+              // Log the export
+              fetch('/api/data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user.name, action: `Exported ${agencies.length} agencies as CSV`, target: 'Agency CSV Export' } })
+              });
+            }}
+            className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transition-all active:scale-95"
+          >
+            <Download className="w-4 h-4" />
+            Download CSV
+          </button>
+        )}
       </div>
 
       {message && (

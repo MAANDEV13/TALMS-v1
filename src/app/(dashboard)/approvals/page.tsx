@@ -554,8 +554,8 @@ export default function ApprovalsPage() {
                 <XCircle className="w-6 h-6 text-slate-400" />
               </button>
             </div>
-            {/* Tab switcher for GD */}
-            {user?.role === 'general_director' && (
+            {/* Tab switcher for GD and Director */}
+            {(user?.role === 'general_director' || user?.role === 'director') && (
               <div className="px-8 pt-6 pb-0 flex gap-1 bg-slate-50 border-b border-slate-100">
                 <button
                   onClick={() => setDocTab('details')}
@@ -727,7 +727,7 @@ export default function ApprovalsPage() {
                 </section>
 
               {/* Documents Section - always visible to all roles, full panel for GD */}
-              {(user?.role !== 'general_director' || docTab === 'details') && (
+              {(user?.role !== 'general_director' && user?.role !== 'director' || docTab === 'details') && (
                 <section className="space-y-4">
                   <h4 className="font-bold text-slate-900 flex items-center gap-2">
                     <FileText className="w-5 h-5 text-blue-600" />
@@ -749,7 +749,38 @@ export default function ApprovalsPage() {
                               <p className="text-[10px] text-slate-400 font-bold uppercase">{selectedApp.docFileNames?.[doc] || 'File on record'}</p>
                             </div>
                           </div>
-                          <span className="text-[9px] font-black bg-green-100 text-green-700 px-2 py-0.5 rounded-full border border-green-200 uppercase">Submitted</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-black bg-green-100 text-green-700 px-2 py-0.5 rounded-full border border-green-200 uppercase">Submitted</span>
+                            <button
+                              onClick={async () => {
+                                const key = selectedApp.docFileData?.[doc];
+                                if (!key) {
+                                  alert('Document file not available in storage.');
+                                  return;
+                                }
+                                if (key.startsWith('http') || key.startsWith('data:')) {
+                                  window.open(key, '_blank');
+                                  return;
+                                }
+                                try {
+                                  const res = await fetch('/api/storage', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'getDownloadUrl', key })
+                                  });
+                                  if (!res.ok) throw new Error('Failed to get download URL');
+                                  const { url } = await res.json();
+                                  window.open(url, '_blank');
+                                } catch (err) {
+                                  alert('Failed to open document.');
+                                }
+                              }}
+                              className="w-8 h-8 bg-slate-100 hover:bg-blue-600 text-slate-400 hover:text-white rounded-lg flex items-center justify-center transition-all"
+                              title="View Document"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       ))
                     ) : (
@@ -762,8 +793,8 @@ export default function ApprovalsPage() {
                 </section>
               )}
 
-              {/* Full Documents Tab for GD */}
-              {user?.role === 'general_director' && docTab === 'documents' && (
+              {/* Full Documents Tab for GD and Director */}
+              {(user?.role === 'general_director' || user?.role === 'director') && docTab === 'documents' && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h4 className="font-bold text-slate-900 uppercase tracking-tight">Document Checklist</h4>

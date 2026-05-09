@@ -20,7 +20,10 @@ import {
   Edit2,
   Eye,
   Clock,
-  ArrowRight
+  ArrowRight,
+  Save,
+  Loader2,
+  Plus
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -35,6 +38,11 @@ export default function AgencyDetailPage() {
   const [activities, setActivities] = useState<any[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'history'>('overview');
+  const [editingDates, setEditingDates] = useState(false);
+  const [editIssueDate, setEditIssueDate] = useState('');
+  const [editExpiryDate, setEditExpiryDate] = useState('');
+  const [savingDates, setSavingDates] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
 
   const uploadFileToR2 = async (file: File, prefix: string) => {
     const key = `${prefix}/${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
@@ -355,23 +363,94 @@ export default function AgencyDetailPage() {
 
           <div className="space-y-8">
              <div className="bg-slate-900 p-8 rounded-3xl text-white space-y-6 shadow-2xl shadow-slate-900/40 border border-white/5">
-                <div className="flex items-center gap-3">
-                   <ShieldCheck className="w-6 h-6 text-blue-400" />
-                   <h3 className="font-bold text-lg uppercase tracking-tight">License Status</h3>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <ShieldCheck className="w-6 h-6 text-blue-400" />
+                    <h3 className="font-bold text-lg uppercase tracking-tight">License Status</h3>
+                  </div>
+                  {(user?.role === 'admin' || user?.role === 'director' || user?.role === 'general_director') && !editingDates && (
+                    <button
+                      onClick={() => {
+                        setEditIssueDate(agency.issue_date || agency.issueDate || '');
+                        setEditExpiryDate(agency.expiry_date || agency.expiryDate || '');
+                        setEditingDates(true);
+                      }}
+                      className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all" title="Edit Dates"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
                 <div className="space-y-4">
                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
                       <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Issue Date</p>
-                      <p className="text-sm font-bold">{agency.issue_date || agency.issueDate || 'Not Issued'}</p>
+                      {editingDates ? (
+                        <input
+                          type="date"
+                          value={editIssueDate}
+                          onChange={(e) => setEditIssueDate(e.target.value)}
+                          className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-1.5 text-sm font-bold text-white outline-none focus:ring-2 focus:ring-blue-400"
+                        />
+                      ) : (
+                        <p className="text-sm font-bold">{agency.issue_date || agency.issueDate || 'Not Issued'}</p>
+                      )}
                    </div>
                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
                       <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Expiry Date</p>
-                      <p className="text-sm font-bold text-amber-400">{agency.expiry_date || agency.expiryDate || 'Not Issued'}</p>
+                      {editingDates ? (
+                        <input
+                          type="date"
+                          value={editExpiryDate}
+                          onChange={(e) => setEditExpiryDate(e.target.value)}
+                          className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-1.5 text-sm font-bold text-amber-400 outline-none focus:ring-2 focus:ring-amber-400"
+                        />
+                      ) : (
+                        <p className="text-sm font-bold text-amber-400">{agency.expiry_date || agency.expiryDate || 'Not Issued'}</p>
+                      )}
                    </div>
                 </div>
-                <button className="w-full py-4 bg-blue-600 hover:bg-blue-700 rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-600/20 active:scale-95">
-                   Request Renewal
-                </button>
+                {editingDates ? (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setEditingDates(false)}
+                      className="flex-1 py-3 border border-white/20 text-white/70 font-bold rounded-xl hover:bg-white/10 transition-all text-xs uppercase"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setSavingDates(true);
+                        const fields: any = {};
+                        if (editIssueDate) fields.issue_date = new Date(editIssueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        if (editExpiryDate) fields.expiry_date = new Date(editExpiryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        await fetch('/api/data', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ table: 'agencies', action: 'update', data: { id: agency.id, fields } })
+                        });
+                        await fetch('/api/data', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'Admin', action: 'Updated license dates for', target: agency.name } })
+                        });
+                        setAgency({ ...agency, issue_date: fields.issue_date || agency.issue_date, expiry_date: fields.expiry_date || agency.expiry_date });
+                        setEditingDates(false);
+                        setSavingDates(false);
+                        setMessage('License dates updated successfully.');
+                        setTimeout(() => setMessage(null), 4000);
+                      }}
+                      disabled={savingDates}
+                      className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all text-xs uppercase flex items-center justify-center gap-2 active:scale-95"
+                    >
+                      {savingDates ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      Save Dates
+                    </button>
+                  </div>
+                ) : (
+                  <button className="w-full py-4 bg-blue-600 hover:bg-blue-700 rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-600/20 active:scale-95">
+                    Request Renewal
+                  </button>
+                )}
               {(user?.role === 'officer' || user?.role === 'general_director' || user?.role === 'director') && (agency.print_count || agency.printCount) > 0 && (
                 <div className="p-4 mt-4 bg-amber-50 border border-amber-100 rounded-3xl flex items-center gap-3">
                   <Printer className="w-5 h-5 text-amber-600" />
@@ -399,28 +478,66 @@ export default function AgencyDetailPage() {
       {activeTab === 'documents' && (
         <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
            <div className="flex items-center justify-between mb-8">
-             <div>
-               <h3 className="text-xl font-bold text-slate-900 uppercase tracking-tight">Agency Document Registry</h3>
-               <p className="text-sm text-slate-500 mt-1">Directly manage and replace official compliance files.</p>
-             </div>
-             <button 
-               onClick={async () => {
-                 const newDoc = prompt('Enter document name:');
-                 if (newDoc) {
-                   const updated = {...agency, docs: [...agency.docs, newDoc]};
-                   setAgency(updated);
-                   await fetch('/api/data', { 
-                     method: 'POST', 
-                     headers: { 'Content-Type': 'application/json' }, 
-                     body: JSON.stringify({ table: 'agencies', action: 'update', data: { id: agency.id, fields: { docs: JSON.stringify(updated.docs) } } }) 
-                   });
-                 }
-               }}
-               className="px-5 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all text-xs uppercase tracking-widest"
-             >
-               + Add New Placeholder
-             </button>
-           </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 uppercase tracking-tight">Agency Document Registry</h3>
+                <p className="text-sm text-slate-500 mt-1">Directly manage and replace official compliance files.</p>
+              </div>
+              <div className="flex gap-3">
+                <input type="file" id="manual-doc-upload" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 5 * 1024 * 1024) { alert('File must be under 5MB'); e.target.value = ''; return; }
+                  const docName = prompt('Enter document name:', file.name.replace(/\.[^.]+$/, ''));
+                  if (!docName) { e.target.value = ''; return; }
+                  setUploadingDoc(true);
+                  try {
+                    const key = await uploadFileToR2(file, `agencies/${agency.name}/docs`);
+                    const updatedDocs = [...(agency.docs || []), docName];
+                    const updatedFileData = { ...(agency.doc_file_data || {}), [docName]: key };
+                    await fetch('/api/data', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ table: 'agencies', action: 'update', data: { id: agency.id, fields: { docs: JSON.stringify(updatedDocs), doc_file_data: JSON.stringify(updatedFileData) } } })
+                    });
+                    await fetch('/api/data', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'Admin', action: `Uploaded document: ${docName} (${file.name})`, target: agency.name } })
+                    });
+                    setAgency({ ...agency, docs: updatedDocs, doc_file_data: updatedFileData });
+                    setMessage(`Document "${docName}" uploaded successfully.`);
+                    setTimeout(() => setMessage(null), 4000);
+                  } catch (err) {
+                    alert('Failed to upload document.');
+                  }
+                  setUploadingDoc(false);
+                  e.target.value = '';
+                }} />
+                <label htmlFor="manual-doc-upload" className={`px-5 py-2.5 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 transition-all text-xs uppercase tracking-widest cursor-pointer flex items-center gap-2 active:scale-95 ${
+                  uploadingDoc ? 'bg-blue-400 cursor-wait' : 'bg-blue-600 hover:bg-blue-700'
+                }`}>
+                  {uploadingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Upload Document
+                </label>
+                <button 
+                  onClick={async () => {
+                    const newDoc = prompt('Enter document placeholder name:');
+                    if (newDoc) {
+                      const updated = {...agency, docs: [...agency.docs, newDoc]};
+                      setAgency(updated);
+                      await fetch('/api/data', { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify({ table: 'agencies', action: 'update', data: { id: agency.id, fields: { docs: JSON.stringify(updated.docs) } } }) 
+                      });
+                    }
+                  }}
+                  className="px-5 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all text-xs uppercase tracking-widest"
+                >
+                  + Placeholder
+                </button>
+              </div>
+            </div>
 
            {message && (
              <div className="mb-8 p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
