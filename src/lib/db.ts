@@ -19,13 +19,28 @@ export async function getUserById(id: string) {
 }
 
 export async function createUser(user: {
-  id: string; email: string; name?: string; password_hash: string;
+  id: string; email: string; name?: string; password_hash?: string | null;
   role: string; region?: string; status?: string; invited_by?: string;
 }) {
   await d1Execute(
     `INSERT INTO users (id, email, name, password_hash, role, region, status, invited_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [user.id, user.email, user.name || null, user.password_hash, user.role, user.region || null, user.status || 'Active', user.invited_by || null]
+    [user.id, user.email, user.name || null, user.password_hash || null, user.role, user.region || null, user.status || 'Active', user.invited_by || null]
+  );
+}
+
+export async function updateUser(id: string, fields: Record<string, any>) {
+  const keys = Object.keys(fields);
+  if (keys.length === 0) return;
+  const sets = keys.map(k => `${k} = ?`).join(', ');
+  const vals = keys.map(k => fields[k]);
+  await d1Execute(`UPDATE users SET ${sets} WHERE id = ?`, [...vals, id]);
+}
+
+export async function updateUserPassword(id: string, passwordHash: string) {
+  await d1Execute(
+    `UPDATE users SET password_hash = ?, status = 'Active' WHERE id = ?`,
+    [passwordHash, id]
   );
 }
 
