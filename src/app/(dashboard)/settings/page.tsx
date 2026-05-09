@@ -171,27 +171,49 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Certificate Content */}
-              <div className="space-y-4 col-span-full">
+              {/* Certificate Data */}
+              <div className="space-y-4 col-span-full pt-4 border-t border-slate-100/50">
                 <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
                   <Shield className="w-4 h-4 text-purple-600" />
-                  Certificate Content (Legal)
+                  Certificate Data
                 </h4>
                 <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-600">Director General Name</label>
+                      <input 
+                        type="text" 
+                        value={settings.dgName || ''}
+                        onChange={(e) => setSettings({...settings, dgName: e.target.value})}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 outline-none text-sm font-bold text-slate-900"
+                        placeholder="e.g. Eng. Abdiwali Jama"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-600">Director General Title</label>
+                      <input 
+                        type="text" 
+                        value={settings.dgTitle || ''}
+                        onChange={(e) => setSettings({...settings, dgTitle: e.target.value})}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 outline-none text-sm font-bold text-slate-900"
+                        placeholder="e.g. Director General of MOCAAD"
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-600">Authorization Text</label>
                     <textarea 
-                      value={settings.certAuthText}
+                      value={settings.certAuthText || ''}
                       onChange={(e) => setSettings({...settings, certAuthText: e.target.value})}
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm min-h-[100px] leading-relaxed"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 outline-none text-sm min-h-[100px] leading-relaxed text-slate-900"
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-600">Suspension/Revocation Notice</label>
                     <textarea 
-                      value={settings.certSuspensionText}
+                      value={settings.certSuspensionText || ''}
                       onChange={(e) => setSettings({...settings, certSuspensionText: e.target.value})}
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm min-h-[80px] leading-relaxed"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 outline-none text-sm min-h-[80px] leading-relaxed text-slate-900"
                     />
                   </div>
                 </div>

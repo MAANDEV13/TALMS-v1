@@ -569,30 +569,48 @@ export default function AgencyDetailPage() {
                         try {
                           const key = await uploadFileToR2(file, `agencies/${agency.name}/updates`);
                           
-                          await fetch('/api/data', { 
-                            method: 'POST', 
-                            headers: { 'Content-Type': 'application/json' }, 
-                            body: JSON.stringify({ 
-                              table: 'agency_changes', 
-                              action: 'create', 
-                              data: { 
-                                id: Math.random().toString(36).substr(2, 9),
-                                agency_id: agency.license_id || agency.licenseId, 
-                                type: 'edit', 
-                                data: JSON.stringify({ document: doc, action: 'Replace File', fileName: file.name, r2Key: key }),
-                                requester: user?.name || 'Officer',
-                                date: new Date().toLocaleDateString()
-                              } 
-                            }) 
-                          });
-                          
-                          await fetch('/api/data', { 
-                            method: 'POST', 
-                            headers: { 'Content-Type': 'application/json' }, 
-                            body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'Officer', action: `Requested file replacement for: ${doc}`, target: agency.name } }) 
-                          });
+                          if (user?.role === 'admin') {
+                            // Admin bypasses DG approval
+                            const updatedFileData = { ...(agency.doc_file_data || agency.docFileData || {}), [doc]: key };
+                            await fetch('/api/data', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ table: 'agencies', action: 'update', data: { id: agency.id, fields: { doc_file_data: JSON.stringify(updatedFileData) } } })
+                            });
+                            await fetch('/api/data', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'Admin', action: `Replaced document: ${doc}`, target: agency.name } })
+                            });
+                            setAgency({ ...agency, doc_file_data: updatedFileData });
+                            setMessage(`Document "${doc}" has been successfully replaced.`);
+                          } else {
+                            // Others need DG approval
+                            await fetch('/api/data', { 
+                              method: 'POST', 
+                              headers: { 'Content-Type': 'application/json' }, 
+                              body: JSON.stringify({ 
+                                table: 'agency_changes', 
+                                action: 'create', 
+                                data: { 
+                                  id: Math.random().toString(36).substr(2, 9),
+                                  agency_id: agency.license_id || agency.licenseId, 
+                                  type: 'edit', 
+                                  data: JSON.stringify({ document: doc, action: 'Replace File', fileName: file.name, r2Key: key }),
+                                  requester: user?.name || 'Officer',
+                                  date: new Date().toLocaleDateString()
+                                } 
+                              }) 
+                            });
+                            
+                            await fetch('/api/data', { 
+                              method: 'POST', 
+                              headers: { 'Content-Type': 'application/json' }, 
+                              body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'Officer', action: `Requested file replacement for: ${doc}`, target: agency.name } }) 
+                            });
 
-                          setMessage(`Your replacement request for "${doc}" has been sent to the General Director for approval.`);
+                            setMessage(`Your replacement request for "${doc}" has been sent to the General Director for approval.`);
+                          }
                           setTimeout(() => setMessage(null), 5000);
                         } catch (err) {
                           alert('Failed to upload file for replacement.');

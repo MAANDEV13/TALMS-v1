@@ -56,13 +56,19 @@ export async function POST(req: NextRequest) {
   try {
     switch (table) {
       case 'agencies': {
-        if (action === 'create') await db.createAgency(data);
+        if (action === 'create') {
+          data.registered_by = user.name;
+          await db.createAgency(data);
+        }
         else if (action === 'update') await db.updateAgency(data.id, data.fields);
         else if (action === 'delete') await db.deleteAgency(data.id);
         break;
       }
       case 'applications': {
-        if (action === 'create') await db.createApplication(data);
+        if (action === 'create') {
+          data.registered_by = user.name;
+          await db.createApplication(data);
+        }
         else if (action === 'update') await db.updateApplication(data.id, data.fields);
         else if (action === 'delete') await db.deleteApplication(data.id);
         break;
