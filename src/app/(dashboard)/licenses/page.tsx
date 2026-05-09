@@ -52,9 +52,9 @@ export default function LicensesPage() {
             saved = saved.filter((app: any) => app.status !== 'Draft');
           }
           
-          // Filter by region for regional_director
           if (user?.role === 'regional_director' && user.region) {
-            saved = saved.filter((app: any) => (app.region || '').toLowerCase() === user.region.toLowerCase());
+            const userRegion = user.region.toLowerCase();
+            saved = saved.filter((app: any) => (app.region || '').toLowerCase() === userRegion);
           }
           setApplications(saved);
         }

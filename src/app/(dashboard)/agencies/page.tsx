@@ -35,7 +35,8 @@ export default function AgenciesPage() {
         if (res.ok) {
           const allAgencies = await res.json();
           if (user?.role === 'regional_director' && user.region) {
-            setAgencies(allAgencies.filter((a: any) => (a.region || '').toLowerCase() === user.region.toLowerCase()));
+            const userRegion = user.region.toLowerCase();
+            setAgencies(allAgencies.filter((a: any) => (a.region || '').toLowerCase() === userRegion));
           } else {
             setAgencies(allAgencies);
           }
