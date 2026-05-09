@@ -114,9 +114,10 @@ export const MOCK_DB = {
     delete cache['applications'];
   },
 
-  updateApplicationStatus: async (id: string, status: string, color: string, comment?: string) => {
+  updateApplicationStatus: async (id: string, status: string, color: string, comment?: string, agencyId?: string) => {
     const fields: Record<string, any> = { status, status_color: color };
     if (comment) fields.review_comment = comment;
+    if (agencyId) fields.agency_id = agencyId;
     await postData('applications', 'update', { id, fields });
     delete cache['applications'];
   },
@@ -163,9 +164,24 @@ export const MOCK_DB = {
 
   // License ID generation
   getNextLicenseId: (): string => {
+    const currentYear = new Date().getFullYear();
     const agencies = cache['agencies']?.data || [];
-    const count = agencies.length + 1;
-    return `SL-2026-${String(count).padStart(4, '0')}`;
+    const yearAgencies = agencies.filter((a: any) => a.licenseId?.endsWith(`/${currentYear}`) || a.license_id?.endsWith(`/${currentYear}`));
+    const count = yearAgencies.length + 1;
+    return `${String(count).padStart(3, '0')}-MOCAAD-DCA/${currentYear}`;
+  },
+
+  getNextLicenseIdAsync: async (): Promise<string> => {
+    const currentYear = new Date().getFullYear();
+    const agencies = await fetchTable('agencies');
+    const yearAgencies = agencies.filter((a: any) => a.licenseId?.endsWith(`/${currentYear}`) || a.license_id?.endsWith(`/${currentYear}`));
+    const count = yearAgencies.length + 1;
+    return `${String(count).padStart(3, '0')}-MOCAAD-DCA/${currentYear}`;
+  },
+
+  addAgency: async (agency: any) => {
+    await postData('agencies', 'create', agency);
+    delete cache['agencies'];
   },
 
   getDraftId: (): string => {

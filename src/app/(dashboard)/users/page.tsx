@@ -28,6 +28,7 @@ export default function UserManagementPage() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    password: '',
     role: 'officer',
     region: ''
   });
@@ -61,7 +62,7 @@ export default function UserManagementPage() {
     setInviteStatus(null);
 
     try {
-      const res = await fetch('/api/invites/create', {
+      const res = await fetch('/api/users/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -70,14 +71,22 @@ export default function UserManagementPage() {
       const data = await res.json();
 
       if (res.ok && data.success) {
-        setInviteStatus({ type: 'success', message: `Invitation sent to ${formData.email} successfully!` });
-        setFormData({ name: '', email: '', role: 'officer', region: '' });
+        setInviteStatus({ type: 'success', message: `User ${formData.email} created successfully!` });
+        setFormData({ name: '', email: '', password: '', role: 'officer', region: '' });
+        
+        // Refresh user list
+        const resUsers = await fetch('/api/data?table=users');
+        if (resUsers.ok) {
+          const newUsers = await resUsers.json();
+          setUsers(Array.isArray(newUsers) ? newUsers : []);
+        }
+
         setTimeout(() => {
           setShowAddUser(false);
           setInviteStatus(null);
-        }, 3000);
+        }, 2000);
       } else {
-        setInviteStatus({ type: 'error', message: data.error || 'Failed to send invitation' });
+        setInviteStatus({ type: 'error', message: data.error || 'Failed to create user' });
       }
     } catch {
       setInviteStatus({ type: 'error', message: 'Network error. Please try again.' });
@@ -202,8 +211,8 @@ export default function UserManagementPage() {
           <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-300">
             <div className="p-8 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-bold text-slate-900">Send Invitation</h3>
-                <p className="text-sm text-slate-500 mt-1">Invite a user via email to join TALMS.</p>
+                <h3 className="text-xl font-bold text-slate-900">Add New User</h3>
+                <p className="text-sm text-slate-500 mt-1">Create a user account directly.</p>
               </div>
               <button onClick={() => { setShowAddUser(false); setInviteStatus(null); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-400">
                 <XCircle className="w-6 h-6" />
@@ -242,8 +251,19 @@ export default function UserManagementPage() {
                 </div>
               )}
 
-              <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
-                <p className="text-xs font-bold text-blue-700">📧 An invitation email will be sent. The user will set their own password when accepting.</p>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest text-blue-600">Initial Password</label>
+                <div className="relative">
+                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input 
+                    type="text" 
+                    value={formData.password}
+                    onChange={(e) => setFormData({...formData, password: e.target.value})}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm" 
+                    placeholder="Enter password" 
+                    required 
+                  />
+                </div>
               </div>
               
               <div className="space-y-1.5">
@@ -292,7 +312,7 @@ export default function UserManagementPage() {
                   className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2"
                 >
                   {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  {sending ? 'Sending...' : 'Send Invitation'}
+                  {sending ? 'Creating...' : 'Create User'}
                 </button>
               </div>
             </form>

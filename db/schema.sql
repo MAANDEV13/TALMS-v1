@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS agencies (
   issue_date TEXT,
   expiry_date TEXT,
   registered_by TEXT,
+  docs TEXT,
   print_count INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now'))
 );

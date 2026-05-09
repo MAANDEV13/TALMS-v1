@@ -221,6 +221,27 @@ function NewApplicationPageContent() {
 
   const [selectionMade, setSelectionMade] = useState(false);
 
+  const uploadFileToR2 = async (file: File, prefix: string) => {
+    const key = `${prefix}/${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+    const res = await fetch('/api/storage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'getUploadUrl', key, contentType: file.type })
+    });
+    
+    if (!res.ok) throw new Error('Failed to get upload URL');
+    const { url } = await res.json();
+    
+    const uploadRes = await fetch(url, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': file.type }
+    });
+    
+    if (!uploadRes.ok) throw new Error('Failed to upload file to R2');
+    return key;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -250,32 +271,60 @@ function NewApplicationPageContent() {
     }
 
     if (currentStep === 3) {
-      if (type === 'new' && !MOCK_DB.checkAgencyName(agencyName)) {
-        setNameError('Agency name is already registered or has a pending application.');
-        setCurrentStep(1);
-        return;
-      }
-
       setIsSubmitting(true);
 
-      const generatedId = MOCK_DB.getNextLicenseId();
+      // Validate Agency Name manually
+      const [appsRes, agenciesRes] = await Promise.all([
+        fetch('/api/data?table=applications').then(r => r.ok ? r.json() : []),
+        fetch('/api/data?table=agencies').then(r => r.ok ? r.json() : [])
+      ]);
+
+      const apps = Array.isArray(appsRes) ? appsRes : [];
+      const agencies = Array.isArray(agenciesRes) ? agenciesRes : [];
+
+      if (type === 'new') {
+        const agencyMatch = agencies.some((a: any) => a.name?.toLowerCase() === agencyName.toLowerCase());
+        const appMatch = apps.some((a: any) => a.agency?.toLowerCase() === agencyName.toLowerCase() && a.status !== 'Draft');
+        if (agencyMatch || appMatch) {
+          setNameError('Agency name is already registered or has a pending application.');
+          setCurrentStep(1);
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      // Generate NEW-00X sequence
+      let assignedAgencyId = selectedAgency?.licenseId || selectedAgency?.license_id;
+      if (type === 'new') {
+        const newApps = apps.filter((a: any) => a.agencyId?.startsWith('NEW-') || a.agency_id?.startsWith('NEW-'));
+        const nextNum = newApps.length + 1;
+        assignedAgencyId = `NEW-${String(nextNum).padStart(3, '0')}`;
+      }
 
       const newApp = {
         id: Math.random().toString(36).substr(2, 9),
         agency: agencyName,
-        agencyId: selectedAgency?.licenseId || generatedId,
+        agency_id: assignedAgencyId,
+        agencyId: assignedAgencyId, // keep both for frontend compatibility
         region: region,
         district: district,
+        contact_person: secondName,
         contactPerson: secondName,
         phone: secondPhone,
         email: secondEmail,
+        alternate_person: {
+          name: altName,
+          phone: altPhone
+        },
         alternatePerson: {
           name: altName,
           phone: altPhone
         },
+        register_date: new Date().toISOString().split('T')[0],
         registerDate: new Date().toISOString().split('T')[0],
         type: type === 'new' ? 'New' : 'Renewal',
         status: 'Under Review',
+        status_color: 'amber',
         statusColor: 'amber',
         financials: {
           registrationFee: regFee,
@@ -285,26 +334,38 @@ function NewApplicationPageContent() {
           totalDue: (regFee + appFee) - discount,
           paymentReceipt: paymentReceiptFile
         },
+        uploaded_docs: uploadedDocs,
         uploadedDocs: uploadedDocs,
+        doc_file_names: docFileNames,
         docFileNames: docFileNames,
         docFileData: docFileData,
-        registeredBy: `${region || 'HQ'}-${(user?.role || 'officer').replace('_', ' ')}`,
+        registered_by: user?.name || `${region || 'HQ'}-${(user?.role || 'officer').replace('_', ' ')}`,
+        registeredBy: user?.name || `${region || 'HQ'}-${(user?.role || 'officer').replace('_', ' ')}`,
         date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       };
 
-      const success = MOCK_DB.addApplication(newApp);
-      
-      if (!success) {
-        setNameError('A submission for this agency name is already in progress.');
+      try {
+        await fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ table: 'applications', action: 'create', data: newApp })
+        });
+        
+        await fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'Officer', action: `Submitted ${newApp.type} application for`, target: agencyName } })
+        });
+
+        setTimeout(() => {
+          setIsSubmitting(false);
+          router.push('/licenses');
+        }, 1500);
+      } catch (err) {
+        setNameError('A submission error occurred.');
         setCurrentStep(1);
         setIsSubmitting(false);
-        return;
       }
-
-      setTimeout(() => {
-        setIsSubmitting(false);
-        router.push('/licenses');
-      }, 1500);
     }
   };
 
@@ -724,11 +785,17 @@ function NewApplicationPageContent() {
                         <span className="text-4xl font-black text-white uppercase">{agencyName ? agencyName[0] : '?'}</span>
                       </div>
                     )}
-                    <input type="file" id="logo-upload" className="hidden" accept="image/*" onChange={(e) => {
+                    <input type="file" id="logo-upload" className="hidden" accept="image/*" onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
                       if (file.size > 5 * 1024 * 1024) { alert('Logo must be under 5MB'); return; }
-                      setAgencyLogoPreview(URL.createObjectURL(file));
+                      try {
+                        const key = await uploadFileToR2(file, `agencies/${agencyName}/identity`);
+                        setAgencyLogoPreview(URL.createObjectURL(file));
+                        setDocFileData(prev => ({ ...prev, 'agency_logo': key }));
+                      } catch (err) {
+                        alert('Failed to upload logo to storage.');
+                      }
                       e.target.value = '';
                     }} />
                     <label htmlFor="logo-upload" className="absolute -bottom-2 -right-2 w-9 h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center justify-center cursor-pointer shadow-lg transition-all">
@@ -749,11 +816,17 @@ function NewApplicationPageContent() {
                         <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">No Photo</span>
                       </div>
                     )}
-                    <input type="file" id="owner-photo-upload" className="hidden" accept="image/*" onChange={(e) => {
+                    <input type="file" id="owner-photo-upload" className="hidden" accept="image/*" onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
                       if (file.size > 5 * 1024 * 1024) { alert('Photo must be under 5MB'); return; }
-                      setOwnerPhotoPreview(URL.createObjectURL(file));
+                      try {
+                        const key = await uploadFileToR2(file, `agencies/${agencyName}/identity`);
+                        setOwnerPhotoPreview(URL.createObjectURL(file));
+                        setDocFileData(prev => ({ ...prev, 'owner_photo': key }));
+                      } catch (err) {
+                        alert('Failed to upload owner photo to storage.');
+                      }
                       e.target.value = '';
                     }} />
                     <label htmlFor="owner-photo-upload" className="absolute -bottom-2 -right-2 w-9 h-9 bg-slate-700 hover:bg-slate-900 text-white rounded-xl flex items-center justify-center cursor-pointer shadow-lg transition-all">
@@ -821,7 +894,7 @@ function NewApplicationPageContent() {
                         id={inputId}
                         className="hidden"
                         accept=".pdf,.jpg,.jpeg,.png,.webp"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
                           if (file.size > 5 * 1024 * 1024) {
@@ -830,15 +903,19 @@ function NewApplicationPageContent() {
                             return;
                           }
                           const action = isUploaded ? 'Replaced' : 'Uploaded';
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            const base64String = reader.result as string;
-                            setDocFileData((prev) => ({ ...prev, [doc]: base64String }));
+                          try {
+                            const key = await uploadFileToR2(file, `applications/${agencyName}/docs`);
+                            setDocFileData((prev) => ({ ...prev, [doc]: key }));
                             setUploadedDocs((prev) => prev.includes(doc) ? prev : [...prev, doc]);
                             setDocFileNames((prev) => ({ ...prev, [doc]: file.name }));
-                            MOCK_DB.logActivity(user?.name || 'Officer', `${action} document: ${doc} (${file.name})`, agencyName || 'New Application');
-                          };
-                          reader.readAsDataURL(file);
+                            fetch('/api/data', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'Officer', action: `${action} document: ${doc} (${file.name})`, target: agencyName || 'New Application' } })
+                            });
+                          } catch (err) {
+                            alert(`Failed to upload ${doc} to storage.`);
+                          }
                           e.target.value = '';
                         }}
                       />

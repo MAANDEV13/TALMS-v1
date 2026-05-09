@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
       case 'applications': {
         if (action === 'create') await db.createApplication(data);
         else if (action === 'update') await db.updateApplication(data.id, data.fields);
+        else if (action === 'delete') await db.deleteApplication(data.id);
         break;
       }
       case 'activities': {

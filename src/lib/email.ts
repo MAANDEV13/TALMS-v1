@@ -1,19 +1,13 @@
-// Resend email client for TALMS invitation system
+// Resend email client for TALMS
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY!;
 
-export async function sendInviteEmail({
+export async function sendOtpEmail({
   to,
-  invitedByName,
-  role,
-  region,
-  inviteUrl,
+  otp,
 }: {
   to: string;
-  invitedByName: string;
-  role: string;
-  region?: string;
-  inviteUrl: string;
+  otp: string;
 }) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -24,44 +18,30 @@ export async function sendInviteEmail({
     body: JSON.stringify({
       from: 'TALMS System <onboarding@resend.dev>',
       to,
-      subject: `You've been invited to TALMS by ${invitedByName}`,
+      subject: `Your TALMS Login Code: ${otp}`,
       html: `
-        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:0 auto;padding:40px 20px">
-          <div style="text-align:center;margin-bottom:32px">
-            <h1 style="font-size:20px;font-weight:800;color:#0f172a;margin:0;text-transform:uppercase;letter-spacing:1px">
-              Travel Agency License Management System
+        <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:480px;margin:0 auto;padding:40px 20px">
+          <div style="text-align:center;margin-bottom:28px">
+            <h1 style="font-size:18px;font-weight:800;color:#0f172a;margin:0;text-transform:uppercase;letter-spacing:1px">
+              TALMS Security Verification
             </h1>
-            <p style="font-size:12px;color:#64748b;margin-top:4px;text-transform:uppercase;letter-spacing:2px">
+            <p style="font-size:11px;color:#64748b;margin-top:4px;text-transform:uppercase;letter-spacing:2px">
               Ministry of Civil Aviation & Airport Development
             </p>
           </div>
 
-          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:32px;margin-bottom:24px">
-            <h2 style="font-size:18px;font-weight:700;color:#0f172a;margin:0 0 12px">
-              You've been invited!
-            </h2>
-            <p style="font-size:14px;color:#475569;line-height:1.6;margin:0 0 8px">
-              <strong>${invitedByName}</strong> has invited you to join TALMS as a
-              <strong style="color:#1e40af;text-transform:capitalize">${role.replace('_', ' ')}</strong>${region ? ` for the <strong>${region}</strong> region` : ''}.
-            </p>
-            <p style="font-size:14px;color:#475569;line-height:1.6;margin:0">
-              Click the button below to set up your account and get started.
-            </p>
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:32px;text-align:center;margin-bottom:24px">
+            <p style="font-size:13px;color:#475569;margin:0 0 20px">Your one-time login code is:</p>
+            <div style="font-size:36px;font-weight:900;letter-spacing:8px;color:#1e40af;font-family:monospace;padding:16px;background:white;border:2px solid #e2e8f0;border-radius:10px;display:inline-block">
+              ${otp}
+            </div>
+            <p style="font-size:12px;color:#94a3b8;margin-top:20px">This code expires in <strong>5 minutes</strong>.</p>
           </div>
 
-          <div style="text-align:center;margin-bottom:32px">
-            <a href="${inviteUrl}"
-               style="display:inline-block;background:#1e40af;color:white;padding:14px 40px;
-                      border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;
-                      letter-spacing:0.5px;text-transform:uppercase">
-              Accept Invitation
-            </a>
-          </div>
-
-          <div style="border-top:1px solid #e2e8f0;padding-top:20px;text-align:center">
-            <p style="font-size:12px;color:#94a3b8;margin:0;line-height:1.6">
-              This invitation link expires in <strong>48 hours</strong>.<br>
-              If you did not expect this invitation, you can safely ignore this email.
+          <div style="text-align:center">
+            <p style="font-size:11px;color:#94a3b8;line-height:1.6">
+              If you did not request this code, someone may be trying to access your account.
+              Please secure your credentials immediately.
             </p>
           </div>
         </div>
@@ -71,7 +51,7 @@ export async function sendInviteEmail({
 
   if (!res.ok) {
     const text = await res.text();
-    console.error('Resend email failed:', res.status, text);
+    console.error('Resend OTP email failed:', res.status, text);
     throw new Error(`Email send failed: ${res.status} ${text}`);
   }
 

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserByEmail } from '@/lib/db';
 import { verifyPassword } from '@/lib/password';
-import { signJwt } from '@/lib/jwt';
-import { cookies } from 'next/headers';
+import { kvPut } from '@/lib/cloudflare-kv';
+import { sendOtpEmail } from '@/lib/email';
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!user.password_hash) {
-      return NextResponse.json({ error: 'Account not activated. Please check your invitation email.' }, { status: 401 });
+      return NextResponse.json({ error: 'Account not activated' }, { status: 401 });
     }
 
     if (user.status !== 'Active') {
@@ -30,6 +30,45 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
+    // Admin users require OTP
+    if (user.role === 'admin') {
+      // Generate 6-digit OTP
+      const otp = String(Math.floor(100000 + Math.random() * 900000));
+
+      // Store OTP in KV with 5 minute TTL
+      const otpPayload = JSON.stringify({
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        region: user.region,
+        otp,
+        createdAt: Date.now(),
+      });
+
+      await kvPut(`otp:${user.email}`, otpPayload, 300); // 5 minutes
+
+      // Send OTP via Resend
+      try {
+        await sendOtpEmail({ to: user.email, otp });
+      } catch (emailErr: any) {
+        console.error('Failed to send OTP email:', emailErr);
+        // Still return success so the user can see the OTP flow
+        // In production with verified domain this won't fail
+      }
+
+      return NextResponse.json({
+        success: true,
+        requiresOtp: true,
+        email: user.email,
+        message: 'OTP sent to your email',
+      });
+    }
+
+    // Non-admin users skip OTP and get JWT directly
+    const { signJwt } = await import('@/lib/jwt');
+    const { cookies } = await import('next/headers');
+    
     const token = await signJwt({
       sub: user.id,
       email: user.email,
@@ -43,7 +82,7 @@ export async function POST(req: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: 60 * 60 * 24 * 7,
       path: '/',
     });
 

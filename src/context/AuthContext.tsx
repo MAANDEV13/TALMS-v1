@@ -16,7 +16,8 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; requiresOtp?: boolean; email?: string }>;
+  verifyOtp: (email: string, otp: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -25,6 +26,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   login: async () => ({ success: false }),
+  verifyOtp: async () => ({ success: false }),
   logout: async () => {},
   refreshUser: async () => {},
 });
@@ -35,7 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const publicPaths = ['/login', '/accept-invite'];
+  const publicPaths = ['/login'];
 
   const refreshUser = useCallback(async () => {
     try {
@@ -81,12 +83,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
 
       if (res.ok && data.success) {
+        if (data.requiresOtp) {
+          return { success: true, requiresOtp: true, email: data.email };
+        }
         setUser(data.user);
         router.push('/dashboard');
         return { success: true };
       }
 
       return { success: false, error: data.error || 'Login failed' };
+    } catch (error: any) {
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  };
+
+  const verifyOtp = async (email: string, otp: string) => {
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setUser(data.user);
+        router.push('/dashboard');
+        return { success: true };
+      }
+
+      return { success: false, error: data.error || 'Verification failed' };
     } catch (error: any) {
       return { success: false, error: 'Network error. Please try again.' };
     }
@@ -101,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, verifyOtp, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

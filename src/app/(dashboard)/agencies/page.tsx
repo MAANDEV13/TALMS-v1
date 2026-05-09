@@ -29,12 +29,24 @@ export default function AgenciesPage() {
   const [filterRegion, setFilterRegion] = React.useState('All');
 
   React.useEffect(() => {
-    MOCK_DB.init();
-    const allAgencies = MOCK_DB.get('agencies');
-    if (user?.role === 'regional_director' && user.region) {
-      setAgencies(allAgencies.filter((a: any) => a.region === user.region));
-    } else {
-      setAgencies(allAgencies);
+    async function loadAgencies() {
+      try {
+        const res = await fetch('/api/data?table=agencies');
+        if (res.ok) {
+          const allAgencies = await res.json();
+          if (user?.role === 'regional_director' && user.region) {
+            setAgencies(allAgencies.filter((a: any) => (a.region || '').toLowerCase() === user.region.toLowerCase()));
+          } else {
+            setAgencies(allAgencies);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load agencies:', err);
+      }
+    }
+    
+    if (user) {
+      loadAgencies();
     }
   }, [user]);
 
@@ -66,12 +78,12 @@ export default function AgenciesPage() {
     setTimeout(() => setMessage(null), 5000);
   };
 
-  const filteredAgencies = agencies.filter((a) => {
+  const filteredAgencies = agencies.filter((a: any) => {
     const searchMatch = 
       (a.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (a.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.license_id || a.licenseId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.city || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (a.region || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (a.district || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (a.contactPerson || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (a.email || '').toLowerCase().includes(searchTerm.toLowerCase());
       
@@ -242,7 +254,7 @@ export default function AgenciesPage() {
                 <tr key={agency.id} className="hover:bg-slate-50 transition-colors group">
                   <td className="px-6 py-4">
                     <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-100 uppercase tracking-tight">
-                      {agency.licenseId}
+                      {agency.license_id || agency.licenseId}
                     </span>
                   </td>
                   <td className="px-6 py-4">
@@ -265,7 +277,7 @@ export default function AgenciesPage() {
                   {(user?.role === 'officer' || user?.role === 'director' || user?.role === 'general_director') && (
                     <td className="px-6 py-4">
                       <span className="text-xs font-bold text-slate-600 bg-slate-50 px-2 py-1 rounded border border-slate-100">
-                        {agency.registeredBy || 'N/A'}
+                        {agency.registered_by || agency.registeredBy || 'N/A'}
                       </span>
                     </td>
                   )}
