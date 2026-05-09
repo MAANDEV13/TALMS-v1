@@ -11,15 +11,18 @@ import {
   Filter,
   CheckCircle2,
   XCircle,
-  Key
+  Key,
+  Send,
+  Loader2
 } from 'lucide-react';
-import { MOCK_DB } from '@/lib/mockDb';
 
 export default function UserManagementPage() {
   const [showAddUser, setShowAddUser] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('All');
+  const [inviteStatus, setInviteStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [sending, setSending] = useState(false);
   
   // Form State
   const [formData, setFormData] = useState({
@@ -36,19 +39,60 @@ export default function UserManagementPage() {
     'Sanaag',
     'Awdal',
     'Sool',
+    'Gabiley',
     'Saaxil'
   ];
 
   useEffect(() => {
-    setUsers(MOCK_DB.get('users'));
+    async function loadUsers() {
+      try {
+        const res = await fetch('/api/data?table=users');
+        if (res.ok) {
+          const data = await res.json();
+          setUsers(Array.isArray(data) ? data : []);
+        }
+      } catch { /* ignore */ }
+    }
+    loadUsers();
   }, []);
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    MOCK_DB.addUser(formData);
-    setUsers(MOCK_DB.get('users'));
-    setShowAddUser(false);
-    setFormData({ name: '', email: '', password: '', role: 'officer', region: '' });
+    setSending(true);
+    setInviteStatus(null);
+
+    try {
+      const res = await fetch('/api/users/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setInviteStatus({ type: 'success', message: `User ${formData.email} created successfully!` });
+        setFormData({ name: '', email: '', password: '', role: 'officer', region: '' });
+        
+        // Refresh user list
+        const resUsers = await fetch('/api/data?table=users');
+        if (resUsers.ok) {
+          const newUsers = await resUsers.json();
+          setUsers(Array.isArray(newUsers) ? newUsers : []);
+        }
+
+        setTimeout(() => {
+          setShowAddUser(false);
+          setInviteStatus(null);
+        }, 2000);
+      } else {
+        setInviteStatus({ type: 'error', message: data.error || 'Failed to create user' });
+      }
+    } catch {
+      setInviteStatus({ type: 'error', message: 'Network error. Please try again.' });
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -168,9 +212,9 @@ export default function UserManagementPage() {
             <div className="p-8 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Add New User</h3>
-                <p className="text-sm text-slate-500 mt-1">Grant system access and assign a role.</p>
+                <p className="text-sm text-slate-500 mt-1">Create a user account directly.</p>
               </div>
-              <button onClick={() => setShowAddUser(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400">
+              <button onClick={() => { setShowAddUser(false); setInviteStatus(null); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-400">
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
@@ -199,6 +243,13 @@ export default function UserManagementPage() {
                   required 
                 />
               </div>
+
+              {inviteStatus && (
+                <div className={`p-4 rounded-2xl text-sm font-medium flex items-center gap-2 ${inviteStatus.type === 'success' ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
+                  {inviteStatus.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                  {inviteStatus.message}
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-widest text-blue-600">Initial Password</label>
@@ -257,9 +308,11 @@ export default function UserManagementPage() {
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95"
+                  disabled={sending}
+                  className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2"
                 >
-                  Confirm & Create
+                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  {sending ? 'Creating...' : 'Create User'}
                 </button>
               </div>
             </form>

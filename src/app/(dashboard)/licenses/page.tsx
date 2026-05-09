@@ -26,17 +26,46 @@ export default function LicensesPage() {
   const [filterStatus, setFilterStatus] = useState('All');
 
   useEffect(() => {
-    let saved = MOCK_DB.get('applications');
-    // Hide drafts from non-officers/regional_directors
-    if (user?.role !== 'officer' && user?.role !== 'regional_director') {
-      saved = saved.filter((app: any) => app.status !== 'Draft');
+    async function loadApplications() {
+      try {
+        const res = await fetch('/api/data?table=applications');
+        if (res.ok) {
+          const appsData = await res.json();
+          const normalized = (Array.isArray(appsData) ? appsData : []).map((app: any) => {
+            const parsedDocs = typeof app.uploaded_docs === 'string' ? JSON.parse(app.uploaded_docs) : (app.uploaded_docs || []);
+            const parsedNames = typeof app.doc_file_names === 'string' ? JSON.parse(app.doc_file_names) : (app.doc_file_names || {});
+            const parsedData = typeof app.doc_file_data === 'string' ? JSON.parse(app.doc_file_data) : (app.doc_file_data || {});
+            return {
+              ...app,
+              uploadedDocs: parsedDocs,
+              docFileNames: parsedNames,
+              docFileData: parsedData,
+              statusColor: app.status_color || app.statusColor,
+              agencyId: app.agency_id || app.agencyId,
+              reviewComment: app.review_comment || app.reviewComment
+            };
+          });
+          
+          let saved = normalized;
+          // Hide drafts from non-officers/regional_directors
+          if (user?.role !== 'officer' && user?.role !== 'regional_director') {
+            saved = saved.filter((app: any) => app.status !== 'Draft');
+          }
+          
+          // Filter by region for regional_director
+          if (user?.role === 'regional_director' && user.region) {
+            saved = saved.filter((app: any) => (app.region || '').toLowerCase() === user.region.toLowerCase());
+          }
+          setApplications(saved);
+        }
+      } catch (err) {
+        console.error('Failed to load applications:', err);
+      }
     }
     
-    // Filter by region for regional_director
-    if (user?.role === 'regional_director' && user.region) {
-      saved = saved.filter((app: any) => app.region === user.region);
+    if (user) {
+      loadApplications();
     }
-    setApplications(saved);
   }, [user]);
 
   const canPrint = (app: any) => {
@@ -54,7 +83,7 @@ export default function LicensesPage() {
   const filteredApps = applications.filter((app) => {
     const searchMatch = 
       (app.agency || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (app.agencyId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (app.agency_id || app.agencyId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (app.region || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (app.district || '').toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -142,15 +171,15 @@ export default function LicensesPage() {
                 <tr key={app.id} className="hover:bg-slate-50 transition-colors group cursor-pointer">
                   <td className="px-6 py-4">
                     <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-1 rounded uppercase tracking-tighter">
-                      {app.agencyId || (app.type === 'New' ? 'NEW' : 'N/A')}
+                      {app.agency_id || app.agencyId || (app.type === 'New' ? 'NEW' : 'N/A')}
                     </span>
                   </td>
                   <td className="px-6 py-4 font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{app.agency}</td>
                   <td className="px-6 py-4 text-sm text-slate-600">{app.region || '-'}</td>
                   <td className="px-6 py-4 text-sm text-slate-600">{app.district || '-'}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{app.contactPerson || '-'}</td>
+                  <td className="px-6 py-4 text-sm text-slate-600">{app.contact_person || app.contactPerson || '-'}</td>
                   <td className="px-6 py-4 text-sm text-slate-600">{app.phone ? `+252 ${app.phone}` : '-'}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{app.registerDate || '-'}</td>
+                  <td className="px-6 py-4 text-sm text-slate-600">{app.register_date || app.registerDate || '-'}</td>
                   <td className="px-6 py-4 text-sm text-slate-600">{app.type}</td>
                     <td className="px-6 py-4 text-sm font-bold">
                       {app.status === 'Draft' && (user?.role === 'officer' || user?.role === 'regional_director') ? (
@@ -253,13 +282,13 @@ export default function LicensesPage() {
                   </h4>
                   <div className="p-5 bg-blue-50 border border-blue-100 rounded-2xl">
                     <p className="text-sm text-blue-900 font-medium italic leading-relaxed">
-                      "{viewingApp.reviewComment}"
+                      "{viewingApp.review_comment || viewingApp.reviewComment}"
                     </p>
                   </div>
                 </div>
               )}
 
-              {!viewingApp.reviewComment && (
+              {!(viewingApp.review_comment || viewingApp.reviewComment) && (
                 <div className="p-5 bg-slate-50 border border-slate-100 rounded-2xl flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-slate-400 shrink-0" />
                   <p className="text-xs text-slate-500 font-medium">No reviewer comments have been added yet for this application.</p>
@@ -268,12 +297,64 @@ export default function LicensesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">Agency ID</p>
-                  <p className="text-sm font-bold text-slate-900">{viewingApp.agencyId || 'Pending'}</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Agency ID</p>
+                  <p className="text-sm font-bold text-slate-900">{viewingApp.agency_id || viewingApp.agencyId || 'Pending'}</p>
                 </div>
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
                   <p className="text-[10px] font-bold text-slate-400 uppercase">Type</p>
                   <p className="text-sm font-bold text-slate-900">{viewingApp.type}</p>
+                </div>
+              </div>
+
+              {/* Documents Section */}
+              <div className="space-y-3 pt-4 border-t border-slate-100">
+                <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  Application Documents
+                </h4>
+                <div className="grid grid-cols-1 gap-2">
+                  {viewingApp.uploadedDocs && viewingApp.uploadedDocs.length > 0 ? (
+                    viewingApp.uploadedDocs.map((doc: string, i: number) => (
+                      <div key={i} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:border-blue-100 transition-all">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                            <FileText className="w-4 h-4 text-blue-500" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-900">{doc}</p>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase truncate max-w-[150px]">
+                              {viewingApp.docFileNames?.[doc] || 'File attached'}
+                            </p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={async () => {
+                            const key = viewingApp.docFileData?.[doc];
+                            if (key && key.startsWith('http')) {
+                              window.open(key, '_blank');
+                            } else if (key) {
+                              try {
+                                const res = await fetch('/api/storage', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ action: 'getDownloadUrl', key })
+                                });
+                                const { url } = await res.json();
+                                window.open(url, '_blank');
+                              } catch (err) {
+                                alert('Failed to open document.');
+                              }
+                            }
+                          }}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">No documents uploaded.</p>
+                  )}
                 </div>
               </div>
             </div>

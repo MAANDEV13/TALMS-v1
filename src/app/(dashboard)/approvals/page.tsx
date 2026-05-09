@@ -21,7 +21,6 @@ import {
   Eye
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { MOCK_DB } from '@/lib/mockDb';
 
 export default function ApprovalsPage() {
   const { user } = useAuth();
@@ -38,22 +37,48 @@ export default function ApprovalsPage() {
   const [filterStatus, setFilterStatus] = useState('All');
 
   useEffect(() => {
-    MOCK_DB.init();
-    // Never show drafts in the approval workflow
-    setApprovals(MOCK_DB.get('applications').filter((app: any) => app.status !== 'Draft'));
-    setAgencyChanges(MOCK_DB.get('agency_changes'));
+    async function loadData() {
+      try {
+        const [appsRes, changesRes] = await Promise.all([
+          fetch('/api/data?table=applications'),
+          fetch('/api/data?table=agency_changes')
+        ]);
+        if (appsRes.ok) {
+          const appsData = await appsRes.json();
+          const normalized = (Array.isArray(appsData) ? appsData : []).map((app: any) => {
+            const parsedDocs = typeof app.uploaded_docs === 'string' ? JSON.parse(app.uploaded_docs) : (app.uploaded_docs || []);
+            const parsedNames = typeof app.doc_file_names === 'string' ? JSON.parse(app.doc_file_names) : (app.doc_file_names || {});
+            const parsedData = typeof app.doc_file_data === 'string' ? JSON.parse(app.doc_file_data) : (app.doc_file_data || {});
+            return {
+              ...app,
+              uploadedDocs: parsedDocs,
+              docFileNames: parsedNames,
+              docFileData: parsedData,
+              statusColor: app.status_color || app.statusColor,
+              agencyId: app.agency_id || app.agencyId,
+              reviewComment: app.review_comment || app.reviewComment
+            };
+          });
+          setApprovals(normalized.filter((app: any) => app.status !== 'Draft'));
+        }
+        if (changesRes.ok) {
+          const changesData = await changesRes.json();
+          setAgencyChanges(Array.isArray(changesData) ? changesData : []);
+        }
+      } catch { /* ignore */ }
+    }
+    loadData();
   }, []);
 
-  const handleAction = (status: string, color: string) => {
+  const handleAction = async (status: string, color: string) => {
     if (!selectedApp) return;
     
-    MOCK_DB.updateApplicationStatus(selectedApp.id, status, color, reviewComment);
-    MOCK_DB.logActivity(user?.name || 'Reviewer', `Updated status to: ${status} for`, selectedApp.agency);
+    // Create actual agency record if approved by GD
+    let assignedLicenseId = selectedApp.agency_id || selectedApp.agencyId;
     
-    // Create or update actual agency record if approved by GD
     if (status === 'Approved by General Director') {
-      const agencies = MOCK_DB.get('agencies');
-      const existingIdx = agencies.findIndex((a: any) => a.licenseId === selectedApp.agencyId || a.name.toLowerCase() === selectedApp.agency.toLowerCase());
+      const agencies = await fetch('/api/data?table=agencies').then(r => r.ok ? r.json() : []);
+      const existingAgency = agencies.find((a: any) => a.name.toLowerCase() === selectedApp.agency.toLowerCase());
       
       const issueDate = new Date(selectedApp.registerDate || new Date());
       const formattedIssueDate = issueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -61,40 +86,78 @@ export default function ApprovalsPage() {
       expiryDateObj.setFullYear(expiryDateObj.getFullYear() + 1);
       const formattedExpiryDate = expiryDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-      if (existingIdx === -1) {
+      if (!existingAgency) {
+        // Generate new License ID: 001-MOCAAD-DCA/YYYY
+        const currentYear = new Date().getFullYear();
+        const yearAgencies = agencies.filter((a: any) => a.licenseId?.endsWith(`/${currentYear}`) || a.license_id?.endsWith(`/${currentYear}`));
+        const count = yearAgencies.length + 1;
+        assignedLicenseId = `${String(count).padStart(3, '0')}-MOCAAD-DCA/${currentYear}`;
+        
         const newAgency = {
           id: Math.random().toString(36).substr(2, 9),
-          licenseId: selectedApp.agencyId,
+          license_id: assignedLicenseId, // Using db snake_case for consistency via API
           name: selectedApp.agency,
           city: selectedApp.district,
           region: selectedApp.region,
           status: 'Active',
-          contactPerson: selectedApp.contactPerson,
+          contact_person: selectedApp.contactPerson,
           phone: selectedApp.phone,
           email: selectedApp.email,
-          createdAt: new Date().toISOString(),
-          issueDate: formattedIssueDate,
-          expiryDate: formattedExpiryDate,
-          printCount: 0
+          issue_date: formattedIssueDate,
+          expiry_date: formattedExpiryDate,
+          registered_by: user?.name || selectedApp.registeredBy || `${selectedApp.region || 'HQ'}-officer`,
+          print_count: 0
         };
-        MOCK_DB.save('agencies', [newAgency, ...agencies]);
+        await fetch('/api/data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'agencies', action: 'create', data: newAgency }) });
       } else {
-        const updatedAgency = { ...agencies[existingIdx], status: 'Active', issueDate: formattedIssueDate, expiryDate: formattedExpiryDate };
-        const newAgencies = [...agencies];
-        newAgencies[existingIdx] = updatedAgency;
-        MOCK_DB.save('agencies', newAgencies);
+        assignedLicenseId = existingAgency.licenseId || existingAgency.license_id;
       }
     }
 
-    setApprovals(MOCK_DB.get('applications'));
+    // Update application
+    const updateFields: any = { status, status_color: color };
+    if (reviewComment) updateFields.review_comment = reviewComment;
+    if (status === 'Approved by General Director') updateFields.agency_id = assignedLicenseId;
+
+    await fetch('/api/data', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ table: 'applications', action: 'update', data: { id: selectedApp.id, fields: updateFields } }) 
+    });
+
+    // Log activity
+    await fetch('/api/data', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'Reviewer', action: `Updated status to: ${status} for`, target: selectedApp.agency } }) 
+    });
+
+    // Refresh approvals list
+    const updatedApps = await fetch('/api/data?table=applications').then(r => r.ok ? r.json() : []);
+    setApprovals(Array.isArray(updatedApps) ? updatedApps.filter((app: any) => app.status !== 'Draft') : []);
+    
     setSelectedApp(null);
     setIsEditing(false);
   };
 
-  const handleUpdateFinancials = () => {
+  const handleUpdateFinancials = async () => {
     if (!selectedApp) return;
-    MOCK_DB.updateApplication(selectedApp);
-    setApprovals(MOCK_DB.get('applications'));
+    const updateFields = {
+      reg_fee: selectedApp.financials.regFee,
+      app_fee: selectedApp.financials.appFee,
+      discount: selectedApp.financials.discount,
+      paid_amount: selectedApp.financials.paidAmount,
+      total_due: selectedApp.financials.totalDue
+    };
+    await fetch('/api/data', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ table: 'applications', action: 'update', data: { id: selectedApp.id, fields: updateFields } }) 
+    });
+    
+    const updatedApps = await fetch('/api/data?table=applications').then(r => r.ok ? r.json() : []);
+    setApprovals(Array.isArray(updatedApps) ? updatedApps.filter((app: any) => app.status !== 'Draft') : []);
+    
     setMessage("Financial records updated successfully.");
     setTimeout(() => setMessage(null), 3000);
   };
@@ -104,7 +167,7 @@ export default function ApprovalsPage() {
   const filteredApprovals = approvals.filter((item) => {
     const searchMatch = 
       (item.agency || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.agencyId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.agency_id || item.agencyId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.region || '').toLowerCase().includes(searchTerm.toLowerCase());
       
     const typeMatch = filterType === 'All' || item.type === filterType;
@@ -115,17 +178,62 @@ export default function ApprovalsPage() {
 
   const filteredChanges = agencyChanges.filter((item) => {
     const searchMatch = 
-      (item.agencyId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.agency_id || item.agencyId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.requester || '').toLowerCase().includes(searchTerm.toLowerCase());
       
     return searchMatch;
   });
 
-  const handleApproveChange = () => {
+  const handleApproveChange = async () => {
     if (!selectedChange) return;
-    MOCK_DB.approveAgencyChange(selectedChange.id);
-    MOCK_DB.logActivity(user?.name || 'Admin', `Approved data change for`, selectedChange.agencyId);
-    setAgencyChanges(MOCK_DB.get('agency_changes'));
+
+    // Apply the change to the agency
+    const agencies = await fetch('/api/data?table=agencies').then(r => r.ok ? r.json() : []);
+    const agency = agencies.find((a: any) => a.licenseId === (selectedChange.agency_id || selectedChange.agencyId) || a.license_id === (selectedChange.agency_id || selectedChange.agencyId));
+    
+    if (agency) {
+      const fields: any = {};
+      if (selectedChange.type === 'edit') {
+        if (selectedChange.data?.newName) fields.name = selectedChange.data.newName;
+        
+        // Handle document replacement
+        if (selectedChange.data?.document && selectedChange.data?.r2Key) {
+          const currentData = typeof agency.doc_data === 'string' ? JSON.parse(agency.doc_data) : (agency.doc_data || {});
+          currentData[selectedChange.data.document] = selectedChange.data.r2Key;
+          fields.doc_data = JSON.stringify(currentData);
+        }
+      } else if (selectedChange.type === 'delete') {
+        await fetch('/api/data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'agencies', action: 'delete', data: { id: agency.id } }) });
+      }
+      
+      if (Object.keys(fields).length > 0) {
+        await fetch('/api/data', { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify({ table: 'agencies', action: 'update', data: { id: agency.id, fields } }) 
+        });
+      }
+    }
+
+    // Delete the change request
+    await fetch('/api/data', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ table: 'agency_changes', action: 'delete', data: { id: selectedChange.id } }) 
+    });
+
+    await fetch('/api/data', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'Admin', action: `Approved ${selectedChange.type} for`, target: selectedChange.agency_id || selectedChange.agencyId } }) 
+    });
+
+    const changesRes = await fetch('/api/data?table=agency_changes');
+    if (changesRes.ok) {
+      const changesData = await changesRes.json();
+      setAgencyChanges(Array.isArray(changesData) ? changesData : []);
+    }
+    
     setSelectedChange(null);
   };
 
@@ -232,7 +340,7 @@ export default function ApprovalsPage() {
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase">{item.agencyId || 'NEW'}</span>
+                          <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase">{item.agency_id || item.agencyId || 'NEW'}</span>
                           <span className="text-sm font-bold text-slate-900">{item.agency}</span>
                         </div>
                         <span className="text-xs text-slate-500 uppercase tracking-tighter mt-1">{item.type} Application</span>
@@ -283,7 +391,7 @@ export default function ApprovalsPage() {
                 {filteredChanges.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50 transition-colors group cursor-pointer">
                     <td className="px-6 py-4 text-sm font-bold text-slate-900">
-                      {item.agencyId}
+                      {item.agency_id || item.agencyId}
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight border ${
@@ -327,7 +435,7 @@ export default function ApprovalsPage() {
             <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div>
                 <p className="text-xs font-bold text-red-600 uppercase tracking-widest">Data Change Request</p>
-                <h3 className="text-2xl font-bold text-slate-900 mt-1">Agency: {selectedChange.agencyId}</h3>
+                <h3 className="text-2xl font-bold text-slate-900 mt-1">Agency: {selectedChange.agency_id || selectedChange.agencyId}</h3>
               </div>
               <button onClick={() => setSelectedChange(null)} className="p-2 hover:bg-slate-200 rounded-full">
                 <XCircle className="w-6 h-6 text-slate-400" />
@@ -347,13 +455,31 @@ export default function ApprovalsPage() {
                         <p className="text-lg font-black text-slate-900">{selectedChange.data?.newName || 'No name change requested'}</p>
                       </div>
                       <div className="p-4 bg-white rounded-xl border border-blue-100 shadow-sm">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Updated Documents Registry</p>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {selectedChange.data?.docs?.map((doc: string, i: number) => (
-                            <span key={i} className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-black rounded uppercase">
-                              {doc}
-                            </span>
-                          )) || <p className="text-xs text-slate-400">No document updates</p>}
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Updated Document Registry</p>
+                        <div className="flex flex-col gap-2 mt-2">
+                          <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                            <div>
+                              <p className="text-xs font-bold text-slate-900">{selectedChange.data?.document}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase">{selectedChange.data?.fileName}</p>
+                            </div>
+                            {selectedChange.data?.r2Key && (
+                              <button 
+                                onClick={async () => {
+                                  const key = selectedChange.data.r2Key;
+                                  const res = await fetch('/api/storage', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'getDownloadUrl', key })
+                                  });
+                                  const { url } = await res.json();
+                                  window.open(url, '_blank');
+                                }}
+                                className="p-1.5 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -384,9 +510,17 @@ export default function ApprovalsPage() {
 
             <div className="p-8 border-t border-slate-100 grid grid-cols-2 gap-4 bg-white">
               <button 
-                onClick={() => {
-                  MOCK_DB.save('agency_changes', MOCK_DB.get('agency_changes').filter((c: any) => c.id !== selectedChange.id));
-                  setAgencyChanges(MOCK_DB.get('agency_changes'));
+                onClick={async () => {
+                  await fetch('/api/data', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ table: 'agency_changes', action: 'delete', data: { id: selectedChange.id } }) 
+                  });
+                  const changesRes = await fetch('/api/data?table=agency_changes');
+                  if (changesRes.ok) {
+                    const changesData = await changesRes.json();
+                    setAgencyChanges(Array.isArray(changesData) ? changesData : []);
+                  }
                   setSelectedChange(null);
                 }}
                 className="py-3.5 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all"
@@ -650,15 +784,30 @@ export default function ApprovalsPage() {
                         <div className="flex items-center gap-2">
                           <span className="text-[9px] font-black bg-green-100 text-green-700 px-2 py-1 rounded-lg border border-green-200 uppercase">Verified</span>
                           <button 
-                            onClick={() => {
-                              const base64Data = selectedApp.docFileData?.[doc];
-                              if (base64Data) {
+                            onClick={async () => {
+                              const key = selectedApp.docFileData?.[doc];
+                              if (key && key.startsWith('http')) {
+                                // Legacy base64/link
                                 const newWindow = window.open();
                                 if (newWindow) {
-                                  newWindow.document.write(`<iframe src="${base64Data}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                                  newWindow.document.write(`<iframe src="${key}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                                }
+                              } else if (key) {
+                                // R2 Key
+                                try {
+                                  const res = await fetch('/api/storage', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'getDownloadUrl', key })
+                                  });
+                                  if (!res.ok) throw new Error('Failed to get download URL');
+                                  const { url } = await res.json();
+                                  window.open(url, '_blank');
+                                } catch (err) {
+                                  alert('Failed to open document.');
                                 }
                               } else {
-                                alert('Document file not available in mock database.');
+                                alert('Document file not available.');
                               }
                             }}
                             className="w-8 h-8 bg-slate-100 hover:bg-blue-600 text-slate-400 hover:text-white rounded-lg flex items-center justify-center transition-all" title="View Document"
@@ -680,7 +829,7 @@ export default function ApprovalsPage() {
               )}
             </div>{/* end scrollable body */}
 
-            <div className="p-8 border-t border-slate-100 grid grid-cols-2 gap-4 bg-white">
+            <div className={`p-8 border-t border-slate-100 grid gap-4 bg-white ${(!isAlreadyReviewed(selectedApp) || isEditing) && user?.role === 'general_director' ? 'grid-cols-3' : 'grid-cols-2'}`}>
               {(!isAlreadyReviewed(selectedApp) || isEditing) ? (
                 <>
                   <button 
@@ -689,6 +838,31 @@ export default function ApprovalsPage() {
                   >
                     Reject to Draft
                   </button>
+                  {user?.role === 'general_director' && (
+                    <button 
+                      onClick={async () => {
+                        if (confirm('Are you sure you want to permanently delete this application? This cannot be undone.')) {
+                          await fetch('/api/data', { 
+                            method: 'POST', 
+                            headers: { 'Content-Type': 'application/json' }, 
+                            body: JSON.stringify({ table: 'applications', action: 'delete', data: { id: selectedApp.id } }) 
+                          });
+                          await fetch('/api/data', { 
+                            method: 'POST', 
+                            headers: { 'Content-Type': 'application/json' }, 
+                            body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user.name, action: 'Deleted application for', target: selectedApp.agency } }) 
+                          });
+                          const updatedApps = await fetch('/api/data?table=applications').then(r => r.ok ? r.json() : []);
+                          setApprovals(Array.isArray(updatedApps) ? updatedApps.filter((app: any) => app.status !== 'Draft') : []);
+                          setSelectedApp(null);
+                        }
+                      }}
+                      className="py-3.5 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 shadow-lg shadow-red-600/20 transition-all flex items-center justify-center gap-2"
+                    >
+                      <XCircle className="w-5 h-5" />
+                      Delete App
+                    </button>
+                  )}
                   <button 
                     onClick={() => {
                       let nextStatus = '';
@@ -718,15 +892,21 @@ export default function ApprovalsPage() {
                 <div className="col-span-2 flex gap-3">
                   {user?.role === 'director' && selectedApp.status === 'Approved by General Director' && (
                     <button 
-                      onClick={() => {
+                      onClick={async () => {
                         if (user?.role === 'director') {
-                          const agencies = MOCK_DB.get('agencies');
-                          const idx = agencies.findIndex((a: any) => a.licenseId === selectedApp.agencyId);
-                          if (idx !== -1) {
-                            const newAgencies = [...agencies];
-                            newAgencies[idx].printCount = (newAgencies[idx].printCount || 0) + 1;
-                            MOCK_DB.save('agencies', newAgencies);
-                            MOCK_DB.logActivity(user.name, 'Printed certificate for', selectedApp.agency);
+                          const agencies = await fetch('/api/data?table=agencies').then(r => r.ok ? r.json() : []);
+                          const agency = agencies.find((a: any) => a.licenseId === (selectedApp.agency_id || selectedApp.agencyId) || a.license_id === (selectedApp.agency_id || selectedApp.agencyId));
+                          if (agency) {
+                            await fetch('/api/data', { 
+                              method: 'POST', 
+                              headers: { 'Content-Type': 'application/json' }, 
+                              body: JSON.stringify({ table: 'agencies', action: 'update', data: { id: agency.id, fields: { print_count: (agency.printCount || agency.print_count || 0) + 1 } } }) 
+                            });
+                            await fetch('/api/data', { 
+                              method: 'POST', 
+                              headers: { 'Content-Type': 'application/json' }, 
+                              body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user.name, action: 'Printed certificate for', target: selectedApp.agency } }) 
+                            });
                           }
                         }
                         window.open(`/print/license/${selectedApp.id}`, '_blank', 'width=900,height=1200');

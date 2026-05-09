@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import Link from 'next/link';
-import { MOCK_DB } from '@/lib/mockDb';
 import { useAuth } from '@/context/AuthContext';
 
 export default function DashboardPage() {
@@ -27,40 +26,49 @@ export default function DashboardPage() {
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
 
   useEffect(() => {
-    MOCK_DB.init();
-    const apps = MOCK_DB.get('applications');
-    const agencies = MOCK_DB.get('agencies');
-    const logs = MOCK_DB.get('activities');
+    async function loadData() {
+      try {
+        const [appsRes, agenciesRes, logsRes] = await Promise.all([
+          fetch('/api/data?table=applications'),
+          fetch('/api/data?table=agencies'),
+          fetch('/api/data?table=activities'),
+        ]);
+        const apps = appsRes.ok ? await appsRes.json() : [];
+        const agencies = agenciesRes.ok ? await agenciesRes.json() : [];
+        const logs = logsRes.ok ? await logsRes.json() : [];
 
-    let filteredApps = apps;
-    let filteredAgencies = agencies;
+        let filteredApps = apps;
+        let filteredAgencies = agencies;
 
-    if (user?.role === 'regional_director' && user.region) {
-      filteredApps = apps.filter((a: any) => a.region === user.region);
-      filteredAgencies = agencies.filter((a: any) => a.region === user.region);
-    }
+        if (user?.role === 'regional_director' && user.region) {
+          filteredApps = apps.filter((a: any) => a.region === user.region);
+          filteredAgencies = agencies.filter((a: any) => a.region === user.region);
+        }
 
-    // Calculate real stats
-    setStats({
-      total: filteredAgencies.length,
-      pending: filteredApps.filter((a: any) => a.status.includes('Review')).length,
-      approved: filteredApps.filter((a: any) => a.status === 'Approved by General Director').length,
-      expiring: filteredAgencies.filter((a: any) => a.status === 'Expired').length
-    });
+        setStats({
+          total: filteredAgencies.length,
+          pending: filteredApps.filter((a: any) => (a.status || '').includes('Review')).length,
+          approved: filteredApps.filter((a: any) => a.status === 'Approved by General Director').length,
+          expiring: filteredAgencies.filter((a: any) => a.status === 'Expired').length
+        });
 
-    // Format applications
-    const formattedApps = filteredApps.slice(0, 6).map((app: any) => ({
-      name: app.agency,
-      type: app.type,
-      status: app.status,
-      statusColor: app.statusColor,
-      date: app.date
-    }));
-    setRecentApps(formattedApps);
+        const formattedApps = filteredApps.slice(0, 6).map((app: any) => ({
+          name: app.agency,
+          type: app.type,
+          status: app.status,
+          statusColor: app.status_color || app.statusColor,
+          date: app.date
+        }));
+        setRecentApps(formattedApps);
 
     // Get logs
     setRecentLogs(logs.slice(0, 4));
-  }, []);
+      } catch (err) {
+        console.error('Failed to load dashboard data:', err);
+      }
+    }
+    loadData();
+  }, [user]);
 
   return (
     <div className="space-y-8 animate-fade-in">

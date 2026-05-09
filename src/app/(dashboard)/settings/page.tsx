@@ -42,17 +42,19 @@ export default function SettingsPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    setSettings(MOCK_DB.getSettings());
+    async function loadSettings() {
+      const s = await MOCK_DB.getSettingsAsync();
+      if (s && typeof s === 'object' && !Array.isArray(s)) setSettings(s);
+    }
+    loadSettings();
   }, []);
 
-  const handleSaveSettings = () => {
+  const handleSaveSettings = async () => {
     setIsSaving(true);
-    MOCK_DB.updateSettings(settings);
-    setTimeout(() => {
-      setIsSaving(false);
-      setMessage('Settings updated successfully!');
-      setTimeout(() => setMessage(null), 3000);
-    }, 1000);
+    await MOCK_DB.saveSettings(settings);
+    setIsSaving(false);
+    setMessage('Settings updated successfully!');
+    setTimeout(() => setMessage(null), 3000);
   };
 
   return (
