@@ -13,6 +13,8 @@ import {
   MessageSquare,
   AlertCircle,
   Trash2,
+  FileText,
+  Eye,
 } from 'lucide-react';
 import Link from 'next/link';
 import { MOCK_DB } from '@/lib/mockDb';
