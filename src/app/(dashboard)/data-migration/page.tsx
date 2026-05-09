@@ -55,24 +55,39 @@ const NEW_SYSTEM_COLUMNS = [
   { key: 'registered_by', label: 'Registered By', required: false },
 ];
 
+// Normalize a header string for matching: lowercase, strip special chars
+function normalizeHeader(h: string): string {
+  return h.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
 function parseCSV(text: string): { headers: string[]; rows: Record<string, string>[] } {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  // Strip BOM if present
+  const cleaned = text.replace(/^\uFEFF/, '');
+  const lines = cleaned.split(/\r?\n/).filter(l => l.trim());
   if (lines.length === 0) return { headers: [], rows: [] };
 
-  // Parse header
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  // Detect delimiter: comma or tab
+  const firstLine = lines[0];
+  const delimiter = firstLine.includes('\t') ? '\t' : ',';
+
+  // Parse header — strip quotes, tabs, invisible chars
+  const headers = firstLine.split(delimiter).map(h => h.trim().replace(/^"|"$/g, '').replace(/[\t\r\n]/g, '').trim()).filter(h => h.length > 0);
 
   // Parse rows
   const rows = lines.slice(1).map(line => {
     const values: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (const char of line) {
-      if (char === '"') { inQuotes = !inQuotes; continue; }
-      if (char === ',' && !inQuotes) { values.push(current.trim()); current = ''; continue; }
-      current += char;
+    if (delimiter === '\t') {
+      line.split('\t').forEach(v => values.push(v.trim().replace(/^"|"$/g, '')));
+    } else {
+      let current = '';
+      let inQuotes = false;
+      for (const char of line) {
+        if (char === '"') { inQuotes = !inQuotes; continue; }
+        if (char === ',' && !inQuotes) { values.push(current.trim()); current = ''; continue; }
+        current += char;
+      }
+      values.push(current.trim());
     }
-    values.push(current.trim());
 
     const row: Record<string, string> = {};
     headers.forEach((h, i) => { row[h] = values[i] || ''; });
@@ -124,12 +139,23 @@ export default function DataMigrationPage() {
       setCsvHeaders(headers);
       setCsvRows(rows);
 
-      // Auto-map columns
+      // Auto-map: mapping is { sysColumn → csvHeader }
       const autoMap: Record<string, string> = {};
       headers.forEach(h => {
-        const normalized = h.toLowerCase().trim();
+        const normalized = normalizeHeader(h);
+        let matchedSysCol: string | null = null;
         if (LEGACY_COLUMN_MAP[normalized]) {
-          autoMap[h] = LEGACY_COLUMN_MAP[normalized];
+          matchedSysCol = LEGACY_COLUMN_MAP[normalized];
+        } else {
+          for (const [legacyKey, sysCol] of Object.entries(LEGACY_COLUMN_MAP)) {
+            if (normalized.includes(legacyKey) || legacyKey.includes(normalized)) {
+              matchedSysCol = sysCol;
+              break;
+            }
+          }
+        }
+        if (matchedSysCol && !autoMap[matchedSysCol]) {
+          autoMap[matchedSysCol] = h;
         }
       });
       setColumnMapping(autoMap);
@@ -149,11 +175,11 @@ export default function DataMigrationPage() {
     setStep('importing');
     setError(null);
 
-    // Map CSV rows to new system format
+    // Map CSV rows to new system format (columnMapping is { sysCol → csvHeader })
     const records = csvRows.map(row => {
       const mapped: Record<string, string> = {};
-      Object.entries(columnMapping).forEach(([csvCol, sysCol]) => {
-        if (sysCol && row[csvCol] !== undefined) {
+      Object.entries(columnMapping).forEach(([sysCol, csvCol]) => {
+        if (csvCol && row[csvCol] !== undefined) {
           mapped[sysCol] = row[csvCol];
         }
       });
@@ -185,8 +211,8 @@ export default function DataMigrationPage() {
 
   const mappedPreviewRows = csvRows.slice(0, 10).map(row => {
     const mapped: Record<string, string> = {};
-    Object.entries(columnMapping).forEach(([csvCol, sysCol]) => {
-      if (sysCol) mapped[sysCol] = row[csvCol] || '';
+    Object.entries(columnMapping).forEach(([sysCol, csvCol]) => {
+      if (csvCol) mapped[sysCol] = row[csvCol] || '';
     });
     return mapped;
   });
@@ -194,8 +220,8 @@ export default function DataMigrationPage() {
   const validationIssues = csvRows.map((row, i) => {
     const issues: string[] = [];
     // Check required "name" field
-    const nameCol = Object.entries(columnMapping).find(([, sys]) => sys === 'name')?.[0];
-    if (!nameCol || !row[nameCol]?.trim()) {
+    const nameCsvCol = columnMapping['name'];
+    if (!nameCsvCol || !row[nameCsvCol]?.trim()) {
       issues.push('Missing agency name');
     }
     return issues.length > 0 ? { row: i + 1, issues } : null;
@@ -335,38 +361,45 @@ export default function DataMigrationPage() {
               </p>
             </div>
             <span className="text-[10px] font-black bg-green-100 text-green-700 px-2.5 py-1 rounded-lg uppercase border border-green-200">
-              {Object.values(columnMapping).filter(Boolean).length} / {NEW_SYSTEM_COLUMNS.length} mapped
+              {Object.keys(columnMapping).filter(k => columnMapping[k]).length} / {NEW_SYSTEM_COLUMNS.length} mapped
             </span>
           </div>
 
           <div className="p-8 space-y-4">
-            {csvHeaders.map((csvCol) => (
-              <div key={csvCol} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-blue-100 transition-all">
-                <div className="flex-1">
-                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Legacy Column</p>
-                  <p className="text-sm font-bold text-slate-900 bg-white px-3 py-1.5 rounded-xl border border-slate-200 inline-block">
-                    {csvCol}
-                  </p>
-                </div>
-
-                <ArrowRight className="w-5 h-5 text-slate-300 shrink-0" />
-
+            {NEW_SYSTEM_COLUMNS.map((sysCol) => (
+              <div key={sysCol.key} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${
+                columnMapping[sysCol.key]
+                  ? 'bg-green-50/50 border-green-100'
+                  : sysCol.required ? 'bg-red-50/30 border-red-100' : 'bg-slate-50 border-slate-100'
+              } hover:border-blue-200`}>
                 <div className="flex-1">
                   <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">New System Column</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold text-slate-900 bg-white px-3 py-1.5 rounded-xl border border-slate-200 inline-block">
+                      {sysCol.label}
+                    </p>
+                    {sysCol.required && (
+                      <span className="text-[9px] font-black bg-red-100 text-red-600 px-1.5 py-0.5 rounded uppercase border border-red-200">Required</span>
+                    )}
+                  </div>
+                </div>
+
+                <ArrowLeft className="w-5 h-5 text-slate-300 shrink-0" />
+
+                <div className="flex-1">
+                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">CSV Column Source</p>
                   <select
-                    value={columnMapping[csvCol] || ''}
-                    onChange={(e) => setColumnMapping(prev => ({ ...prev, [csvCol]: e.target.value }))}
+                    value={columnMapping[sysCol.key] || ''}
+                    onChange={(e) => setColumnMapping(prev => ({ ...prev, [sysCol.key]: e.target.value }))}
                     className={`w-full px-3 py-2 rounded-xl border text-sm font-bold outline-none transition-all ${
-                      columnMapping[csvCol]
+                      columnMapping[sysCol.key]
                         ? 'border-green-200 bg-green-50 text-green-800 focus:ring-2 focus:ring-green-400'
                         : 'border-slate-200 bg-white text-slate-600 focus:ring-2 focus:ring-blue-400'
                     }`}
                   >
-                    <option value="">— Skip this column —</option>
-                    {NEW_SYSTEM_COLUMNS.map(col => (
-                      <option key={col.key} value={col.key}>
-                        {col.label} {col.required ? '(required)' : ''}
-                      </option>
+                    <option value="">— Not mapped —</option>
+                    {csvHeaders.map(h => (
+                      <option key={h} value={h}>{h}</option>
                     ))}
                   </select>
                 </div>
@@ -380,8 +413,7 @@ export default function DataMigrationPage() {
             </button>
             <button
               onClick={() => {
-                const hasName = Object.values(columnMapping).includes('name');
-                if (!hasName) {
+                if (!columnMapping['name']) {
                   setError('You must map at least the "Agency Name" column.');
                   return;
                 }
@@ -428,7 +460,7 @@ export default function DataMigrationPage() {
                 <thead>
                   <tr className="border-b border-slate-100">
                     <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">#</th>
-                    {NEW_SYSTEM_COLUMNS.filter(c => Object.values(columnMapping).includes(c.key)).map(col => (
+                    {NEW_SYSTEM_COLUMNS.filter(c => columnMapping[c.key]).map(col => (
                       <th key={col.key} className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                         {col.label}
                       </th>
@@ -439,7 +471,7 @@ export default function DataMigrationPage() {
                   {mappedPreviewRows.map((row, i) => (
                     <tr key={i} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 text-xs font-bold text-slate-400">{i + 1}</td>
-                      {NEW_SYSTEM_COLUMNS.filter(c => Object.values(columnMapping).includes(c.key)).map(col => (
+                      {NEW_SYSTEM_COLUMNS.filter(c => columnMapping[c.key]).map(col => (
                         <td key={col.key} className="px-4 py-3 text-sm font-medium text-slate-700">
                           {row[col.key] || <span className="text-slate-300 italic">—</span>}
                         </td>
