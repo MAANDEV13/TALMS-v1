@@ -87,15 +87,18 @@ export default function AgencyDetailPage() {
             
             // Add default docs if missing
             if (found.docs.length === 0) {
-              found.docs = [
-                'Application Letter (MOCAAD Format)',
-                'National ID (Staff & Management)',
-                'Company Profile (Vision/Mission)',
-                'Memorandum & Articles of Association',
-                'Staff List & CVs',
-                'Lease Agreement (Notarized)',
-                'Bank Statement (6 Months)'
-              ];
+                found.docs = [
+                  'Application Letter',
+                  'National ID cards (Staff & Management)',
+                  'Company Profile (Vision, Mission, Activities)',
+                  'Memorandum & Articles of Association',
+                  'Staff list and CVs',
+                  'Travel Agency Managers/Owners CVs',
+                  'Shareholders Notarized Document',
+                  'Office Inventory List',
+                  'Notarized Lease Agreement',
+                  'Bank Statement (Last 6 Months)'
+                ];
             }
             setAgency(found);
           }
@@ -201,6 +204,11 @@ export default function AgencyDetailPage() {
                     <tr><td class="label">Contact Person</td><td class="value">${agency.contact_person || agency.contactPerson || 'N/A'}</td></tr>
                     <tr><td class="label">Phone</td><td class="value">${agency.phone || 'N/A'}</td></tr>
                     <tr><td class="label">Email</td><td class="value">${agency.email || 'N/A'}</td></tr>
+                    ${(agency.alternate_person || agency.alternatePerson) ? `
+                    <tr><th colspan="2" style="padding-top:24px">Alternate Contact</th></tr>
+                    <tr><td class="label">Contact Person</td><td class="value">${agency.alternate_person?.name || agency.alternatePerson?.name || 'N/A'}</td></tr>
+                    <tr><td class="label">Phone</td><td class="value">${agency.alternate_person?.phone || agency.alternatePerson?.phone || 'N/A'}</td></tr>
+                    ` : ''}
                     <tr><th colspan="2" style="padding-top:24px">License Dates</th></tr>
                     <tr><td class="label">Issue Date</td><td class="value">${agency.issue_date || agency.issueDate || 'Not Issued'}</td></tr>
                     <tr><td class="label">Expiry Date</td><td class="value">${agency.expiry_date || agency.expiryDate || 'Not Issued'}</td></tr>
@@ -324,7 +332,7 @@ export default function AgencyDetailPage() {
                      </div>
                      <div>
                        <p className="text-xs font-black text-blue-600 uppercase tracking-tighter">Primary Contact</p>
-                       <p className="text-sm font-bold text-slate-900">{agency.contactPerson}</p>
+                       <p className="text-sm font-bold text-slate-900">{agency.contact_person || agency.contactPerson || 'Not Provided'}</p>
                      </div>
                    </div>
                    <div className="space-y-2 pt-2">
@@ -338,25 +346,27 @@ export default function AgencyDetailPage() {
                      </div>
                    </div>
                 </div>
-                {agency.alternatePerson && (
-                  <div className="p-6 bg-slate-50 rounded-2xl space-y-4">
+                <div className="p-6 bg-slate-50 rounded-2xl space-y-4 border border-slate-100">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-600 flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
                           <User className="w-5 h-5" />
                       </div>
                       <div>
-                        <p className="text-xs font-black text-slate-500 uppercase tracking-tighter">Alternate Contact</p>
-                        <p className="text-sm font-bold text-slate-900">{agency.alternatePerson.name}</p>
+                        <p className="text-xs font-black text-blue-600 uppercase tracking-tighter">Secondary Contact</p>
+                        <p className="text-sm font-bold text-slate-900">{agency.alternate_name || agency.alternate_person?.name || agency.alternatePerson?.name || 'Not Provided'}</p>
                       </div>
                     </div>
                     <div className="space-y-2 pt-2">
                       <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
-                          <Phone className="w-3 h-3 text-slate-500" />
-                          {agency.alternatePerson.phone}
+                          <Phone className="w-3 h-3 text-blue-500" />
+                          {agency.alternate_phone || agency.alternate_person?.phone || agency.alternatePerson?.phone || 'Not Provided'}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                          <Mail className="w-3 h-3 text-blue-500" />
+                          No email provided
                       </div>
                     </div>
                   </div>
-                )}
               </div>
             </div>
           </div>
@@ -552,11 +562,18 @@ export default function AgencyDetailPage() {
                   <div className="w-12 h-12 shrink-0 rounded-2xl bg-white border border-slate-100 flex items-center justify-center transition-colors group-hover:border-blue-100 shadow-sm">
                     <FileText className="w-6 h-6 text-blue-500" />
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-black text-slate-900 leading-tight">{doc}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-black text-slate-900 leading-tight truncate">{doc}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-[9px] font-black bg-green-100 text-green-700 px-1.5 py-0.5 rounded uppercase border border-green-200">Verified</span>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">PDF Repository</span>
+                      {(() => {
+                        const key = agency.docData?.[doc] || agency.doc_file_data?.[doc] || agency.docFileData?.[doc];
+                        if (key && typeof key === 'string') {
+                          const fileName = key.split('-').slice(1).join('-') || 'Existing File';
+                          return <span className="text-[10px] text-blue-600 font-bold truncate max-w-[150px]">{fileName}</span>;
+                        }
+                        return <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">PDF Repository</span>;
+                      })()}
                     </div>
                   </div>
                   <input 

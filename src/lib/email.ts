@@ -204,3 +204,37 @@ export async function sendPasswordResetEmail({
 
   return await res.json();
 }
+
+// ─── Generic Email ──────────────────────────────────────────────────
+
+export async function sendEmail({
+  to,
+  subject,
+  html,
+}: {
+  to: string;
+  subject: string;
+  html: string;
+}) {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: FROM_ADDRESS,
+      to,
+      subject,
+      html,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.error('Resend generic email failed:', res.status, text);
+    throw new Error(`Email send failed: ${res.status} ${text}`);
+  }
+
+  return await res.json();
+}

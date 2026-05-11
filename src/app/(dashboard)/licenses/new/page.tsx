@@ -17,7 +17,8 @@ import {
   UserPlus,
   Camera,
   ImageIcon,
-  User
+  User,
+  ExternalLink
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -36,6 +37,7 @@ function NewApplicationPageContent() {
   const [settings, setSettings] = useState<any>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [existingAgencies, setExistingAgencies] = useState<any[]>([]);
+  const [allAgencies, setAllAgencies] = useState<any[]>([]);
   const [selectedAgency, setSelectedAgency] = useState<any>(null);
   
   // Form state
@@ -63,9 +65,10 @@ function NewApplicationPageContent() {
   const [uploadedDocs, setUploadedDocs] = useState<string[]>([]);
   const [docFileNames, setDocFileNames] = useState<Record<string, string>>({});
   const [docFileData, setDocFileData] = useState<Record<string, string>>({});
-  const [agencyLogoPreview, setAgencyLogoPreview] = useState<string | null>(null);
   const [ownerPhotoPreview, setOwnerPhotoPreview] = useState<string | null>(null);
   const [paymentReceiptFile, setPaymentReceiptFile] = useState<string | null>(null);
+  const [grSerial, setGrSerial] = useState('');
+  const [originalAgencyData, setOriginalAgencyData] = useState<any>(null);
 
   useEffect(() => {
     // 1. Role protection
@@ -79,10 +82,21 @@ function NewApplicationPageContent() {
     }
 
     // 2. Load settings & Sync Fees
-    const s = MOCK_DB.getSettings();
-    setSettings(s);
-    setRegFee(type === 'renewal' ? (s.renewalFee || 600) : (s.registrationFee || 1000));
-    setAppFee(s.applicationFee || 500);
+    fetch('/api/data?table=settings')
+      .then(res => res.ok ? res.json() : [])
+      .then(data => {
+        const s = typeof data === 'object' && !Array.isArray(data) ? data : {};
+        setSettings(s);
+        setRegFee(type === 'renewal' ? (parseInt(s.renewalFee) || 100) : (parseInt(s.registrationFee) || 200));
+        setAppFee(type === 'renewal' ? (parseInt(s.renewalAppFee) || 50) : (parseInt(s.registrationAppFee) || 50));
+      })
+      .catch(err => console.error('Failed to load settings:', err));
+    
+    // Fetch live agencies
+    fetch('/api/data?table=agencies')
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setAllAgencies(Array.isArray(data) ? data : []))
+      .catch(err => console.error('Failed to fetch agencies:', err));
 
     // 3. Load draft if ID exists (First Priority)
     if (draftId) {
@@ -123,6 +137,16 @@ function NewApplicationPageContent() {
         setAltName(selectedAgency.alternatePerson.name || '');
         setAltPhone(selectedAgency.alternatePerson.phone || '');
       }
+      setOriginalAgencyData({
+        name: selectedAgency.name,
+        region: selectedAgency.region || '',
+        city: selectedAgency.city || '',
+        contact_person: selectedAgency.contact_person || selectedAgency.contactPerson || '',
+        phone: selectedAgency.phone || '',
+        email: selectedAgency.email || '',
+        altName: selectedAgency.alternate_name || selectedAgency.alternatePerson?.name || '',
+        altPhone: selectedAgency.alternate_phone || selectedAgency.alternatePerson?.phone || ''
+      });
     }
   }, [user, router, draftId, type, selectedAgency]);
 
@@ -136,16 +160,29 @@ function NewApplicationPageContent() {
     'Saaxil': ['Berbera', 'Sheekh', 'Ma-dheera', 'Bulaxaar', 'Xaggal']
   };
   const somalilandRegions = Object.keys(somalilandRegionsData);
+  
+  const hasChanges = () => {
+    if (!originalAgencyData) return false;
+    return (
+      agencyName !== originalAgencyData.name ||
+      region !== originalAgencyData.region ||
+      district !== originalAgencyData.city ||
+      secondName !== originalAgencyData.contact_person ||
+      secondPhone !== originalAgencyData.phone ||
+      secondEmail !== originalAgencyData.email ||
+      altName !== originalAgencyData.altName ||
+      altPhone !== originalAgencyData.altPhone
+    );
+  };
 
   const handleNameCheck = (): boolean => {
     if (!agencyName) return false;
     
     // For renewal, we just search for matching agencies
     if (type === 'renewal') {
-      const agencies = MOCK_DB.get('agencies');
-      const matches = agencies.filter((a: any) => 
-        a.name.toLowerCase().includes(agencyName.toLowerCase()) ||
-        a.licenseId.toLowerCase().includes(agencyName.toLowerCase())
+      const matches = allAgencies.filter((a: any) => 
+        (a.name || '').toLowerCase().includes(agencyName.toLowerCase()) ||
+        (a.licenseId || a.license_id || '').toLowerCase().includes(agencyName.toLowerCase())
       );
       setExistingAgencies(matches);
       if (matches.length > 0) {
@@ -159,8 +196,8 @@ function NewApplicationPageContent() {
       }
     }
 
-    // For new, we check if it DOES NOT exist
-    const isAvailable = MOCK_DB.checkAgencyName(agencyName);
+    // For new, we check if it DOES NOT exist in allAgencies
+    const isAvailable = !allAgencies.some(a => (a.name || '').toLowerCase() === agencyName.toLowerCase());
     if (isAvailable) {
       setNameChecked(true);
       setNameError(null);
@@ -197,7 +234,8 @@ function NewApplicationPageContent() {
         discount: discount,
         paidAmount: feePaid,
         totalDue: (regFee + appFee) - discount,
-        paymentReceipt: paymentReceiptFile
+        paymentReceipt: paymentReceiptFile,
+        grSerial: grSerial
       },
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     };
@@ -211,11 +249,18 @@ function NewApplicationPageContent() {
     router.push('/licenses');
   };
 
-  const handleDiscardDraft = () => {
+  const handleDiscardDraft = async () => {
     if (draftId && confirm('Are you sure you want to discard this draft? This cannot be undone.')) {
-      const apps = MOCK_DB.get('applications');
-      MOCK_DB.save('applications', apps.filter((a: any) => a.id !== draftId));
-      router.push('/licenses');
+      try {
+        await fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ table: 'applications', action: 'delete', data: { id: draftId } })
+        });
+        router.push('/licenses');
+      } catch (err) {
+        console.error('Failed to delete draft:', err);
+      }
     }
   };
 
@@ -266,12 +311,57 @@ function NewApplicationPageContent() {
     }
 
     if (currentStep === 2) {
+      // Item 13: Mandatory document validation on form submit
+      const allDocs = [
+        'Application Letter (MOCAAD Format)',
+        'Passport Photo of Owner/Manager',
+        'National ID Cards (Staff & Management)',
+        'Company Profile (Vision, Mission, Activities)',
+        'Memorandum & Articles of Association',
+        'Staff List & CVs',
+        'Travel Agency Managers/Owners CVs',
+        'Office Inventory List',
+        'Notarized Lease Agreement',
+        'Bank Statement (Last 6 Months)',
+      ];
+      if (businessType === 'partnership') {
+        allDocs.splice(6, 0, 'Shareholders Notarized Document');
+      }
+      const missing = allDocs.filter(d => !uploadedDocs.includes(d));
+      if (missing.length > 0) {
+        alert(`Please upload all mandatory documents before proceeding.\n\nMissing (${missing.length}):\n• ${missing.join('\n• ')}`);
+        return;
+      }
       setCurrentStep(3);
       return;
     }
 
     if (currentStep === 3) {
       setIsSubmitting(true);
+
+      // Item 13: Final validation of mandatory documents before submission
+      const mandatoryDocs = [
+        'Application Letter (MOCAAD Format)',
+        'Passport Photo of Owner/Manager',
+        'National ID Cards (Staff & Management)',
+        'Company Profile (Vision, Mission, Activities)',
+        'Memorandum & Articles of Association',
+        'Staff List & CVs',
+        'Travel Agency Managers/Owners CVs',
+        'Office Inventory List',
+        'Notarized Lease Agreement',
+        'Bank Statement (Last 6 Months)',
+      ];
+      if (businessType === 'partnership') {
+        mandatoryDocs.splice(6, 0, 'Shareholders Notarized Document');
+      }
+      const missingDocs = mandatoryDocs.filter(d => !uploadedDocs.includes(d));
+      if (missingDocs.length > 0) {
+        alert(`Cannot submit: ${missingDocs.length} mandatory document(s) missing.\n\n• ${missingDocs.join('\n• ')}`);
+        setCurrentStep(2);
+        setIsSubmitting(false);
+        return;
+      }
 
       // Validate Agency Name manually
       const [appsRes, agenciesRes] = await Promise.all([
@@ -312,35 +402,23 @@ function NewApplicationPageContent() {
         contactPerson: secondName,
         phone: secondPhone,
         email: secondEmail,
-        alternate_person: {
-          name: altName,
-          phone: altPhone
-        },
-        alternatePerson: {
-          name: altName,
-          phone: altPhone
-        },
+        alternate_name: altName,
+        alternate_phone: altPhone,
         register_date: new Date().toISOString().split('T')[0],
-        registerDate: new Date().toISOString().split('T')[0],
         type: type === 'new' ? 'New' : 'Renewal',
         status: 'Under Review',
         status_color: 'amber',
-        statusColor: 'amber',
-        financials: {
-          registrationFee: regFee,
-          applicationFee: appFee,
-          discount: discount,
-          paidAmount: feePaid,
-          totalDue: (regFee + appFee) - discount,
-          paymentReceipt: paymentReceiptFile
-        },
+        reg_fee: regFee,
+        app_fee: appFee,
+        discount: discount,
+        paid_amount: feePaid,
+        total_due: (regFee + appFee) - discount,
+        payment_receipt: paymentReceiptFile,
+        gr_serial: grSerial,
         uploaded_docs: uploadedDocs,
-        uploadedDocs: uploadedDocs,
         doc_file_names: docFileNames,
-        docFileNames: docFileNames,
-        docFileData: docFileData,
+        doc_file_data: docFileData,
         registered_by: user?.name || `${region || 'HQ'}-${(user?.role || 'officer').replace('_', ' ')}`,
-        registeredBy: user?.name || `${region || 'HQ'}-${(user?.role || 'officer').replace('_', ' ')}`,
         date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       };
 
@@ -536,6 +614,53 @@ function NewApplicationPageContent() {
                           setAgencyName(agency.name);
                           setNameChecked(true);
                           setNameError(null);
+                          // Auto-fill existing details
+                          setRegion(agency.region || '');
+                          setDistrict(agency.city || '');
+                          setSecondName(agency.contact_person || agency.contactPerson || '');
+                          setSecondPhone(agency.phone || '');
+                          setSecondEmail(agency.email || '');
+                          setSecondEmail(agency.email || '');
+                          const alt = agency.alternate_person || agency.alternatePerson;
+                          const aName = agency.alternate_name || alt?.name || '';
+                          const aPhone = agency.alternate_phone || alt?.phone || '';
+                          setAltName(aName);
+                          setAltPhone(aPhone);
+                          
+                          setOriginalAgencyData({
+                            name: agency.name,
+                            region: agency.region || '',
+                            city: agency.city || '',
+                            contact_person: agency.contact_person || agency.contactPerson || '',
+                            phone: agency.phone || '',
+                            email: agency.email || '',
+                            altName: aName,
+                            altPhone: aPhone
+                          });
+
+                          // Load documents for renewal
+                          const docData = typeof agency.doc_file_data === 'string' ? (() => { try { return JSON.parse(agency.doc_file_data); } catch { return {}; } })() : (agency.doc_file_data || {});
+                          const docsFound: string[] = [];
+                          const fileNames: Record<string, string> = {};
+                          const fileData: Record<string, string> = {};
+
+                          Object.entries(docData).forEach(([key, val]) => {
+                            if (val && typeof val === 'string') {
+                              // Map the JSON keys (e.g., 'agency_logo') back to display names if possible,
+                              // or just use the keys as display names.
+                              const displayName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                              docsFound.push(displayName);
+                              fileNames[displayName] = val.split('/').pop() || 'Existing File';
+                              fileData[displayName] = val;
+                              
+                              if (key === 'agency_logo') setAgencyLogoPreview(`/api/storage?key=${encodeURIComponent(val)}`);
+                              if (key === 'owner_photo') setOwnerPhotoPreview(`/api/storage?key=${encodeURIComponent(val)}`);
+                            }
+                          });
+                          
+                          setUploadedDocs(docsFound);
+                          setDocFileNames(fileNames);
+                          setDocFileData(fileData);
                         }}
                         className="w-full flex items-center justify-between p-4 bg-white hover:bg-blue-50 border border-slate-100 hover:border-blue-300 rounded-xl transition-all text-left shadow-sm hover:shadow-md group"
                       >
@@ -745,7 +870,19 @@ function NewApplicationPageContent() {
               </div>
               <button
                 type="button"
-                onClick={() => setCurrentStep(2)}
+                onClick={async () => {
+                  if (type === 'renewal') {
+                    if (!hasChanges()) {
+                      // No changes - proceed to next step
+                      setCurrentStep(2);
+                    } else {
+                      // Changes exist - we will update database on final submit
+                      setCurrentStep(2);
+                    }
+                  } else {
+                    setCurrentStep(2);
+                  }
+                }}
                 disabled={!nameChecked || !!nameError}
                 className={`px-10 py-3 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex items-center gap-2 ${
                   nameChecked && !nameError
@@ -762,10 +899,28 @@ function NewApplicationPageContent() {
 
         {currentStep === 2 && (
           <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-              <FileUp className="w-5 h-5 text-blue-600" />
-              Required Documentation
-            </h2>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <FileUp className="w-5 h-5 text-blue-600" />
+                Required Documentation
+              </h2>
+              {(() => {
+                const totalReq = businessType === 'partnership' ? 11 : 10;
+                const uploaded = uploadedDocs.length;
+                const pct = Math.round((uploaded / totalReq) * 100);
+                const isComplete = uploaded >= totalReq;
+                return (
+                  <div className="flex items-center gap-3">
+                    <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-500 ${isComplete ? 'bg-green-500' : pct > 50 ? 'bg-amber-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                    </div>
+                    <span className={`text-xs font-black px-2.5 py-1 rounded-lg border ${isComplete ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                      {uploaded}/{totalReq} uploaded
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
 
             {/* Agency Identity - Logo + Owner Passport Photo */}
             <div className="mb-8 p-6 bg-slate-50 rounded-2xl border border-slate-100">
@@ -793,6 +948,7 @@ function NewApplicationPageContent() {
                         const key = await uploadFileToR2(file, `agencies/${agencyName}/identity`);
                         setAgencyLogoPreview(URL.createObjectURL(file));
                         setDocFileData(prev => ({ ...prev, 'agency_logo': key }));
+                        setDocFileNames(prev => ({ ...prev, 'agency_logo': file.name }));
                       } catch (err) {
                         alert('Failed to upload logo to storage.');
                       }
@@ -802,7 +958,12 @@ function NewApplicationPageContent() {
                       <Camera className="w-4 h-4" />
                     </label>
                   </div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Click camera to upload · Max 5MB</p>
+                  <div className="text-center">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Logo · Max 5MB</p>
+                    {docFileNames['agency_logo'] && (
+                      <p className="text-[10px] mt-1 font-bold text-blue-600 truncate max-w-[120px] mx-auto">{docFileNames['agency_logo']}</p>
+                    )}
+                  </div>
                 </div>
                 {/* Owner Passport Photo */}
                 <div className="flex flex-col items-center gap-4">
@@ -824,6 +985,7 @@ function NewApplicationPageContent() {
                         const key = await uploadFileToR2(file, `agencies/${agencyName}/identity`);
                         setOwnerPhotoPreview(URL.createObjectURL(file));
                         setDocFileData(prev => ({ ...prev, 'owner_photo': key }));
+                        setDocFileNames(prev => ({ ...prev, 'owner_photo': file.name }));
                       } catch (err) {
                         alert('Failed to upload owner photo to storage.');
                       }
@@ -833,7 +995,12 @@ function NewApplicationPageContent() {
                       <Camera className="w-4 h-4" />
                     </label>
                   </div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Passport-size · JPG/PNG · Max 5MB</p>
+                  <div className="text-center">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Passport-size · Max 5MB</p>
+                    {docFileNames['owner_photo'] && (
+                      <p className="text-[10px] mt-1 font-bold text-blue-600 truncate max-w-[120px] mx-auto">{docFileNames['owner_photo']}</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -841,24 +1008,30 @@ function NewApplicationPageContent() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {(() => {
                 const requiredDocs = [
-                  'Application Letter (MOCAAD Format)',
-                  'Passport Photo of Owner/Manager',
-                  'National ID (Staff & Management)',
-                  'Company Profile (Vision/Mission)',
+                  'Application Letter',
+                  'National ID cards (Staff & Management)',
+                  'Company Profile (Vision, Mission, Activities)',
                   'Memorandum & Articles of Association',
-                  'Staff List & CVs',
-                  'Managers/Owners CVs',
+                  'Staff list and CVs',
+                  'Travel Agency Managers/Owners CVs',
                   'Office Inventory List',
-                  'Lease Agreement (Notarized)',
-                  'Bank Statement (6 Months)',
+                  'Notarized Lease Agreement',
                 ];
                 
-                // Add Step 8 specifically if partnership
                 if (businessType === 'partnership') {
-                  requiredDocs.splice(6, 0, 'Shareholders Copy (Notarized)');
+                  requiredDocs.push('Shareholders Notarized Document');
+                  requiredDocs.push('Bank Statement (Last 6 Months)');
                 }
+                
+                // Add any other existing documents that are already uploaded but not in requiredDocs
+                const allDisplayDocs = [...requiredDocs];
+                uploadedDocs.forEach(d => {
+                  if (!allDisplayDocs.includes(d) && d !== 'Agency Logo' && d !== 'Owner Photo') {
+                    allDisplayDocs.push(d);
+                  }
+                });
 
-                return requiredDocs.map((doc, i) => {
+                return allDisplayDocs.map((doc, i) => {
                   const isUploaded = uploadedDocs.includes(doc);
                   const uploadedFileName = docFileNames[doc];
                   const inputId = `doc-upload-${i}`;
@@ -919,16 +1092,40 @@ function NewApplicationPageContent() {
                           e.target.value = '';
                         }}
                       />
-                      <label
-                        htmlFor={inputId}
-                        className={`shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer ${
-                          isUploaded 
-                            ? 'bg-white border border-green-200 text-green-700 hover:bg-green-600 hover:text-white' 
-                            : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm shadow-blue-600/20'
-                        }`}
-                      >
-                        {isUploaded ? 'Replace' : 'Upload'}
-                      </label>
+                      <div className="flex gap-2 shrink-0">
+                        {isUploaded && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const key = docFileData[doc];
+                              if (!key) return;
+                              const res = await fetch('/api/storage', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'getDownloadUrl', key })
+                              });
+                              if (res.ok) {
+                                const { url } = await res.json();
+                                window.open(url, '_blank');
+                              }
+                            }}
+                            className="p-2 bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-lg transition-all"
+                            title="View Document"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </button>
+                        )}
+                        <label
+                          htmlFor={inputId}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center ${
+                            isUploaded 
+                              ? 'bg-white border border-green-200 text-green-700 hover:bg-green-600 hover:text-white' 
+                              : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm shadow-blue-600/20'
+                          }`}
+                        >
+                          {isUploaded ? 'Replace' : 'Upload'}
+                        </label>
+                      </div>
                     </div>
                   );
                 });
@@ -963,7 +1160,29 @@ function NewApplicationPageContent() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCurrentStep(3)}
+                  onClick={() => {
+                    // Item 13: Mandatory document validation
+                    const allDocs = [
+                      'Application Letter',
+                      'National ID cards (Staff & Management)',
+                      'Company Profile (Vision, Mission, Activities)',
+                      'Memorandum & Articles of Association',
+                      'Staff list and CVs',
+                      'Travel Agency Managers/Owners CVs',
+                      'Office Inventory List',
+                      'Notarized Lease Agreement',
+                    ];
+                    if (businessType === 'partnership') {
+                      allDocs.push('Shareholders Notarized Document');
+                      allDocs.push('Bank Statement (Last 6 Months)');
+                    }
+                    const missing = allDocs.filter(d => !uploadedDocs.includes(d));
+                    if (missing.length > 0) {
+                      alert(`Please upload all mandatory documents before proceeding.\n\nMissing (${missing.length}):\n• ${missing.join('\n• ')}`);
+                      return;
+                    }
+                    setCurrentStep(3);
+                  }}
                   className="px-8 py-2.5 rounded-xl font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-2"
                 >
                   Next Step
@@ -1053,41 +1272,22 @@ function NewApplicationPageContent() {
                 </p>
               </div>
 
-              {/* QR Code / Receipt Upload */}
-              <div className="space-y-2 pt-4 border-t border-slate-100">
-                <label className="text-sm font-bold text-slate-700">Payment QR Code / Receipt (Optional)</label>
-                <div className="flex items-center gap-4">
-                  <div className="w-20 h-20 rounded-xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center shrink-0 overflow-hidden">
-                    {paymentReceiptFile ? (
-                      <img src={paymentReceiptFile} alt="Receipt" className="w-full h-full object-cover" />
-                    ) : (
-                      <Camera className="w-6 h-6 text-slate-300" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <input 
-                      type="file" 
-                      id="receipt-upload" 
-                      className="hidden" 
-                      accept="image/*,.pdf" 
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        if (file.size > 2 * 1024 * 1024) { alert('Receipt must be under 2MB'); return; }
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                          setPaymentReceiptFile(reader.result as string);
-                        };
-                        reader.readAsDataURL(file);
-                        e.target.value = '';
-                      }} 
-                    />
-                    <label htmlFor="receipt-upload" className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold uppercase rounded-xl transition-all cursor-pointer inline-flex items-center gap-2">
-                      <FileUp className="w-4 h-4" />
-                      Upload Receipt
-                    </label>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">JPG/PNG/PDF · Max 2MB</p>
-                  </div>
+              {/* GR Serial Number Section */}
+              <div className="space-y-4 pt-6 border-t border-slate-100">
+                <div className="space-y-2">
+                  <label className="text-sm font-black text-slate-700 uppercase tracking-tight flex items-center gap-2">
+                    <FileUp className="w-4 h-4 text-blue-600" />
+                    General Receipt (GR) Serial Number
+                  </label>
+                  <p className="text-xs text-slate-500">Please enter the serial number from the bank receipt.</p>
+                  <input 
+                    type="text" 
+                    value={grSerial}
+                    onChange={(e) => setGrSerial(e.target.value)}
+                    required
+                    placeholder="e.g. GR-2024-XXXX"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 bg-white"
+                  />
                 </div>
               </div>
             </div>

@@ -26,27 +26,40 @@ export default function PrintLicensePage() {
   const expiryDate = formatDate(oneYearLater);
 
   useEffect(() => {
-    const apps = MOCK_DB.get('applications');
-    const defaults = [
-      { id: '1', agency: 'Hargeisa Sky Travels', type: 'New', status: 'Under Review', statusColor: 'amber', date: todayDate },
-      { id: '2', agency: 'Berbera Maritime Tours', type: 'Renewal', status: 'Approved by general_director', statusColor: 'green', date: todayDate },
-    ];
-    const found = [...apps, ...defaults].find(a => a.id === id);
-    setApp(found);
-    setSettings(MOCK_DB.getSettings());
+    Promise.all([
+      fetch('/api/data?table=applications').then(r => r.ok ? r.json() : []),
+      fetch('/api/data?table=settings').then(r => r.ok ? r.json() : {})
+    ]).then(([appsData, settingsData]) => {
+      const apps = Array.isArray(appsData) ? appsData : [];
+      const s = typeof settingsData === 'object' && !Array.isArray(settingsData) ? settingsData : {};
+      
+      const defaults = [
+        { id: '1', agency: 'Hargeisa Sky Travels', type: 'New', status: 'Under Review', statusColor: 'amber', date: todayDate },
+        { id: '2', agency: 'Berbera Maritime Tours', type: 'Renewal', status: 'Approved by general_director', statusColor: 'green', date: todayDate },
+      ];
+      const found = [...apps, ...defaults].find(a => a.id === id);
+      
+      setApp(found);
+      setSettings(s);
 
-    if (found) {
-      setTimeout(() => {
-        window.print();
-      }, 1000);
-    }
+      if (found) {
+        setTimeout(() => {
+          window.print();
+        }, 1000);
+      }
+    }).catch(err => {
+      console.error('Error fetching data for certificate:', err);
+    });
   }, [id, todayDate]);
 
   if (!app) return <div className="p-10 text-center">Loading Certificate...</div>;
 
-  const licenseId = app.agencyId || `${app.id.toString().padStart(3, '0')}-MOCAAD-DCA/2026`;
+  let rawId = app.agencyId || app.agency_id || app.id || '1';
+  let numMatch = String(rawId).match(/\d+/);
+  let seq = numMatch ? numMatch[0].padStart(3, '0') : String(rawId).substring(0, 3).toUpperCase();
+  const licenseId = `${seq}-MOCAAD-DCA/${now.getFullYear()}`;
   const qrData = encodeURIComponent(
-    `Ministry of Civil Aviation Somaliland\nAgency: ${app.agency}\nLicense ID: ${licenseId}\nIssue Date: ${todayDate}\nExpiry Date: ${expiryDate}`
+    `Ministry of Civil Aviation and\nAirport's Development\nTravel Agency Operating Certificate\nAgency: ${app.agency}\nLicense ID: ${licenseId}\nIssue Date: ${todayDate}\nExpiry Date: ${expiryDate}`
   );
 
   return (
@@ -147,7 +160,7 @@ export default function PrintLicensePage() {
           margin-bottom: 5mm;
           text-transform: uppercase;
           line-height: 1.2;
-          max-width: 500px;
+          width: 100%;
         }
 
         .certificate-title {
@@ -263,13 +276,16 @@ export default function PrintLicensePage() {
         }
 
         .ref-number {
-          font-size: 7.5pt;
+          font-size: 5pt;
           color: #1e40af;
           font-weight: 900;
           text-transform: uppercase;
           white-space: nowrap;
-          letter-spacing: -0.3px;
+          letter-spacing: -0.2px;
           line-height: 1;
+          width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
       `}</style>
 
@@ -290,13 +306,17 @@ export default function PrintLicensePage() {
             <div className="content">
               <img src="/logo.png" className="logo" alt="Ministry Logo" />
               <h2 className="ministry-name">
-                Ministry of Civil Aviation and <br /> Airport's Development
+                {settings?.certHeader ? (
+                  <span style={{ whiteSpace: 'pre-line' }}>{settings.certHeader}</span>
+                ) : (
+                  <>Ministry of Civil Aviation and <br /> Airport's Development</>
+                )}
               </h2>
 
               <h1 className="certificate-title">Travel Agency Operating Certificate</h1>
 
               <p className="auth-text">
-                {settings?.certAuthText || "This certificate authorizes the holder to operate as a licensed Travel Agency, providing approved travel and tourism services in accordance with the laws and regulations of the Republic of Somaliland and applicable International aviation standards."}
+                {settings?.certBody1 || settings?.certAuthText || "This certificate authorizes the holder to operate as a licensed Travel Agency, providing approved travel and tourism services in accordance with the laws and regulations of the Republic of Somaliland and applicable International aviation standards."}
               </p>
 
               <div className="company-wrapper">
@@ -304,7 +324,7 @@ export default function PrintLicensePage() {
               </div>
 
               <p className="suspension-text">
-                {settings?.certSuspensionText || "This certificate is subject to periodic review and may be suspended or revoked in the event of noncompliance with the applicable laws and regulations."}
+                {settings?.certBody2 || settings?.certSuspensionText || "This certificate is subject to periodic review and may be suspended or revoked in the event of noncompliance with the applicable laws and regulations."}
               </p>
 
               <div className="footer">
@@ -314,9 +334,9 @@ export default function PrintLicensePage() {
                 </div>
 
                 <div className="signature-box">
-                  <p className="dg-name">Abdirashid Abdi Jama</p>
+                  <p className="dg-name">{settings?.certSignatureName || settings?.dgName || "Abdirashid Abdi Jama"}</p>
                   <p className="dg-title">Approved by MOCAAD</p>
-                  <p className="dg-title">Director General</p>
+                  <p className="dg-title">{settings?.certSignatureTitle || settings?.dgTitle || "Director General"}</p>
                   <div className="signature-line mt-4"></div>
                 </div>
 

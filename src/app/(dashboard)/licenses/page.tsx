@@ -194,12 +194,19 @@ export default function LicensesPage() {
                             <ChevronRight className="w-4 h-4" />
                           </Link>
                           <button
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation();
                               if (confirm('Are you sure you want to discard this draft? This cannot be undone.')) {
-                                const apps = MOCK_DB.get('applications');
-                                MOCK_DB.save('applications', apps.filter((a: any) => a.id !== app.id));
-                                setApplications(prev => prev.filter(a => a.id !== app.id));
+                                try {
+                                  await fetch('/api/data', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ table: 'applications', action: 'delete', data: { id: app.id } })
+                                  });
+                                  setApplications(prev => prev.filter(a => a.id !== app.id));
+                                } catch (err) {
+                                  console.error('Failed to delete draft:', err);
+                                }
                               }
                             }}
                             className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"

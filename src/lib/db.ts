@@ -57,9 +57,9 @@ export async function getAgencyById(id: string) {
 
 export async function createAgency(a: any) {
   await d1Execute(
-    `INSERT INTO agencies (id, license_id, name, city, region, status, contact_person, phone, email, issue_date, expiry_date, registered_by, docs, doc_file_data, print_count)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [a.id, a.license_id, a.name, a.city, a.region, a.status || 'Active', a.contact_person, a.phone, a.email, a.issue_date, a.expiry_date, a.registered_by, a.docs ? (typeof a.docs === 'string' ? a.docs : JSON.stringify(a.docs)) : null, a.doc_file_data ? (typeof a.doc_file_data === 'string' ? a.doc_file_data : JSON.stringify(a.doc_file_data)) : null, a.print_count || 0]
+    `INSERT INTO agencies (id, license_id, name, city, region, status, contact_person, phone, email, alternate_name, alternate_phone, business_structure, issue_date, expiry_date, registered_by, docs, doc_file_data, print_count)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [a.id, a.license_id, a.name, a.city, a.region, a.status || 'Active', a.contact_person, a.phone, a.email, a.alternate_name, a.alternate_phone, a.business_structure || 'solo', a.issue_date, a.expiry_date, a.registered_by, a.docs ? (typeof a.docs === 'string' ? a.docs : JSON.stringify(a.docs)) : null, a.doc_file_data ? (typeof a.doc_file_data === 'string' ? a.doc_file_data : JSON.stringify(a.doc_file_data)) : null, a.print_count || 0]
   );
 }
 
@@ -87,9 +87,9 @@ export async function getApplicationById(id: string) {
 
 export async function createApplication(app: any) {
   await d1Execute(
-    `INSERT INTO applications (id, agency, agency_id, region, district, contact_person, phone, email, alternate_name, alternate_phone, register_date, type, status, status_color, registered_by, reg_fee, app_fee, discount, paid_amount, total_due, payment_receipt, uploaded_docs, doc_file_names, doc_file_data, date)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [app.id, app.agency, app.agency_id, app.region, app.district, app.contact_person, app.phone, app.email, app.alternate_name, app.alternate_phone, app.register_date, app.type, app.status, app.status_color, app.registered_by, app.reg_fee || 0, app.app_fee || 0, app.discount || 0, app.paid_amount || 0, app.total_due || 0, app.payment_receipt, app.uploaded_docs ? JSON.stringify(app.uploaded_docs) : null, app.doc_file_names ? JSON.stringify(app.doc_file_names) : null, (app.docFileData || app.doc_file_data) ? JSON.stringify(app.docFileData || app.doc_file_data) : null, app.date]
+    `INSERT INTO applications (id, agency, agency_id, region, district, business_structure, contact_person, phone, email, alternate_name, alternate_phone, register_date, type, status, status_color, registered_by, reg_fee, app_fee, discount, paid_amount, total_due, payment_receipt, uploaded_docs, doc_file_names, doc_file_data, date)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [app.id, app.agency, app.agency_id, app.region, app.district, app.business_structure || 'solo', app.contact_person, app.phone, app.email, app.alternate_name, app.alternate_phone, app.register_date, app.type, app.status, app.status_color, app.registered_by, app.reg_fee || 0, app.app_fee || 0, app.discount || 0, app.paid_amount || 0, app.total_due || 0, app.payment_receipt, app.uploaded_docs ? JSON.stringify(app.uploaded_docs) : null, app.doc_file_names ? JSON.stringify(app.doc_file_names) : null, (app.docFileData || app.doc_file_data) ? JSON.stringify(app.docFileData || app.doc_file_data) : null, app.date]
   );
 }
 

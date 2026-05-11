@@ -13,9 +13,13 @@ export function Header() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [recentNotifs, setRecentNotifs] = useState<any[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const prevUnreadRef = useRef(0);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -26,20 +30,50 @@ export function Header() {
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
         setShowProfileMenu(false);
       }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setShowNotifications(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Count unread notifications
+  // Fetch notifications & play sound
   useEffect(() => {
-    fetch('/api/data?table=notifications')
-      .then(r => r.ok ? r.json() : [])
-      .then(notifs => {
-        const arr = Array.isArray(notifs) ? notifs : [];
-        setUnreadCount(arr.filter((n: any) => n.unread).length);
-      })
-      .catch(() => setUnreadCount(0));
+    const fetchNotifs = () => {
+      fetch('/api/data?table=notifications')
+        .then(r => r.ok ? r.json() : [])
+        .then(notifs => {
+          const arr = Array.isArray(notifs) ? notifs : [];
+          const unread = arr.filter((n: any) => n.unread !== false).length;
+          setUnreadCount(unread);
+          setRecentNotifs(arr.slice(0, 5)); // Show top 5 in dropdown
+
+          // Play sound if unread count increased
+          if (unread > prevUnreadRef.current && prevUnreadRef.current !== 0) {
+            try {
+              const audio = new Audio('/notification.mp3');
+              // Basic fallback pop sound if file doesn't exist
+              audio.onerror = () => {
+                const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+                osc.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.1);
+              };
+              audio.play().catch(() => {});
+            } catch (e) {}
+          }
+          prevUnreadRef.current = unread;
+        })
+        .catch(() => setUnreadCount(0));
+    };
+
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 30000); // Poll every 30s
+    return () => clearInterval(interval);
   }, []);
 
   // Live search
@@ -152,21 +186,54 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
-        {/* Bell — Notifications Link */}
-        <Link
-          href="/notifications"
-          className="relative p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-all"
-        >
-          <Bell className="w-5 h-5" />
-          {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 rounded-full flex items-center justify-center text-[10px] font-black text-white border-2 border-white px-1">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
+        {/* Bell — Notifications Dropdown */}
+        <div className="relative" ref={notifRef}>
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            className={`relative p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-all ${showNotifications ? 'bg-slate-100 text-blue-600' : ''}`}
+          >
+            <Bell className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 rounded-full flex items-center justify-center text-[10px] font-black text-white border-2 border-white px-1 animate-in zoom-in">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {showNotifications && (
+            <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-2xl shadow-slate-200/60 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+                <span className="text-sm font-bold text-slate-900">Notifications</span>
+                {unreadCount > 0 && (
+                  <span className="text-xs font-black text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">{unreadCount} New</span>
+                )}
+              </div>
+              <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                {recentNotifs.length > 0 ? recentNotifs.map(n => (
+                  <div key={n.id} className={`p-4 hover:bg-slate-50 transition-colors ${n.unread !== false ? 'bg-blue-50/30' : ''}`}>
+                    <p className="text-sm font-bold text-slate-800 line-clamp-1">{n.title || n.message}</p>
+                    {n.title && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{n.message}</p>}
+                    <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-wider">{n.created_at ? new Date(n.created_at).toLocaleString() : n.time}</p>
+                  </div>
+                )) : (
+                  <div className="p-6 text-center text-slate-500">
+                    <Bell className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                    <p className="text-sm">No new notifications</p>
+                  </div>
+                )}
+              </div>
+              <div className="p-2 border-t border-slate-100 bg-slate-50">
+                <Link 
+                  href="/notifications" 
+                  onClick={() => setShowNotifications(false)}
+                  className="block w-full text-center text-sm font-bold text-blue-600 hover:text-blue-700 py-1.5"
+                >
+                  View All Notifications
+                </Link>
+              </div>
+            </div>
           )}
-          {unreadCount === 0 && (
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-          )}
-        </Link>
+        </div>
         
         <div className="h-8 w-px bg-slate-200 mx-2"></div>
 

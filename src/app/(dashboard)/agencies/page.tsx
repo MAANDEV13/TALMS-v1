@@ -14,11 +14,25 @@ import {
   AlertCircle,
   ShieldCheck,
   CheckCircle2,
-  Download
+  Download,
+  Clock
 } from 'lucide-react';
 import { MOCK_DB } from '@/lib/mockDb';
 import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
+
+// Item 6: Expiration status helper
+function getExpirationStatus(agency: any) {
+  const expiryStr = agency.expiry_date || agency.expiryDate;
+  if (!expiryStr) return { label: 'N/A', color: 'slate', icon: 'clock' };
+  const expiry = new Date(expiryStr);
+  const now = new Date();
+  const diffMs = expiry.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays > 60) return { label: `${diffDays}d remaining`, color: 'green', icon: 'check' };
+  if (diffDays > 0) return { label: `${diffDays}d remaining`, color: 'amber', icon: 'clock' };
+  return { label: `Expired ${Math.abs(diffDays)}d ago`, color: 'red', icon: 'alert' };
+}
 
 export default function AgenciesPage() {
   const { user } = useAuth();
@@ -52,32 +66,60 @@ export default function AgenciesPage() {
     }
   }, [user]);
 
-  const handleRequestChange = (agencyId: string, type: 'edit' | 'delete') => {
+  const handleRequestChange = async (agencyId: string, type: 'edit' | 'delete') => {
     if (type === 'edit') {
       const agency = agencies.find(a => a.id === agencyId);
       setEditingAgency({ ...agency, newName: agency.name, docs: ['National ID', 'Company Profile', 'Lease Agreement'] });
       return;
     }
     
-    MOCK_DB.requestAgencyChange({
-      agencyId,
-      type,
-      requester: user?.name || 'Unknown Officer'
-    });
-    setMessage(`Your deletion request has been sent to the General Director for approval.`);
-    setTimeout(() => setMessage(null), 5000);
+    try {
+      await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table: 'agency_changes',
+          action: 'create',
+          data: {
+            id: Math.random().toString(36).substr(2, 9),
+            agency_id: agencyId,
+            type,
+            requester: user?.name || 'Unknown Officer',
+            date: new Date().toLocaleDateString()
+          }
+        })
+      });
+      setMessage(`Your deletion request has been sent to the General Director for approval.`);
+      setTimeout(() => setMessage(null), 5000);
+    } catch (err) {
+      console.error('Failed to request deletion:', err);
+    }
   };
 
-  const submitEditRequest = () => {
-    MOCK_DB.requestAgencyChange({
-      agencyId: editingAgency.id,
-      type: 'edit',
-      data: { newName: editingAgency.newName, docs: editingAgency.docs },
-      requester: user?.name || 'Unknown Officer'
-    });
-    setEditingAgency(null);
-    setMessage(`Your edit request for ${editingAgency.name} has been sent to the General Director.`);
-    setTimeout(() => setMessage(null), 5000);
+  const submitEditRequest = async () => {
+    try {
+      await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table: 'agency_changes',
+          action: 'create',
+          data: {
+            id: Math.random().toString(36).substr(2, 9),
+            agency_id: editingAgency.license_id || editingAgency.licenseId,
+            type: 'edit',
+            data: JSON.stringify({ newName: editingAgency.newName, docs: editingAgency.docs }),
+            requester: user?.name || 'Unknown Officer',
+            date: new Date().toLocaleDateString()
+          }
+        })
+      });
+      setEditingAgency(null);
+      setMessage(`Your edit request for ${editingAgency.name} has been sent to the General Director.`);
+      setTimeout(() => setMessage(null), 5000);
+    } catch (err) {
+      console.error('Failed to submit edit request:', err);
+    }
   };
 
   const filteredAgencies = agencies.filter((a: any) => {
@@ -86,7 +128,10 @@ export default function AgenciesPage() {
       (a.license_id || a.licenseId || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (a.city || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (a.region || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (a.contactPerson || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.contact_person || a.contactPerson || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.alternate_name || a.alternate_person?.name || a.alternatePerson?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.phone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.alternate_phone || a.alternate_person?.phone || a.alternatePerson?.phone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (a.email || '').toLowerCase().includes(searchTerm.toLowerCase());
       
     const statusMatch = filterStatus === 'All' || a.status === filterStatus;
@@ -190,7 +235,7 @@ export default function AgenciesPage() {
           <button
             onClick={() => {
               // Generate CSV from all agencies
-              const headers = ['License ID', 'Agency Name', 'District', 'Region', 'Status', 'Contact Person', 'Phone', 'Email', 'Issue Date', 'Expiry Date', 'Registered By', 'Created At'];
+              const headers = ['License ID', 'Agency Name', 'District', 'Region', 'Status', 'Contact Person', 'Phone', 'Email', 'Secondary Contact', 'Secondary Phone', 'Issue Date', 'Expiry Date', 'Registered By', 'Created At'];
               const rows = agencies.map((a: any) => [
                 a.license_id || a.licenseId || '',
                 a.name || '',
@@ -200,6 +245,8 @@ export default function AgenciesPage() {
                 a.contact_person || a.contactPerson || '',
                 a.phone || '',
                 a.email || '',
+                a.alternate_name || a.alternate_person?.name || a.alternatePerson?.name || '',
+                a.alternate_phone || a.alternate_person?.phone || a.alternatePerson?.phone || '',
                 a.issue_date || a.issueDate || '',
                 a.expiry_date || a.expiryDate || '',
                 a.registered_by || a.registeredBy || '',
@@ -285,6 +332,7 @@ export default function AgenciesPage() {
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Agency Name</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">City</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Expiration</th>
                 {(user?.role === 'officer' || user?.role === 'director' || user?.role === 'general_director') && (
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Registered By</th>
                 )}
@@ -301,8 +349,23 @@ export default function AgenciesPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shrink-0 shadow-sm">
-                        <span className="text-sm font-black text-white uppercase">{agency.name[0]}</span>
+                      {(() => {
+                        const docData = typeof agency.doc_file_data === 'string' ? (() => { try { return JSON.parse(agency.doc_file_data); } catch { return {}; } })() : (agency.doc_file_data || {});
+                        const logoKey = docData?.agency_logo;
+                        if (logoKey) {
+                          return (
+                            <img
+                              src={logoKey.startsWith('http') ? logoKey : `/api/storage?key=${encodeURIComponent(logoKey)}`}
+                              alt={agency.name}
+                              className="w-9 h-9 rounded-xl object-cover border-2 border-white shadow-sm shrink-0"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }}
+                            />
+                          );
+                        }
+                        return null;
+                      })()}
+                      <div className={`w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shrink-0 shadow-sm ${(() => { const docData = typeof agency.doc_file_data === 'string' ? (() => { try { return JSON.parse(agency.doc_file_data); } catch { return {}; } })() : (agency.doc_file_data || {}); return docData?.agency_logo ? 'hidden' : ''; })()}`}>
+                        <span className="text-sm font-black text-white uppercase">{agency.name?.[0] || '?'}</span>
                       </div>
                       <span className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{agency.name}</span>
                     </div>
@@ -315,6 +378,22 @@ export default function AgenciesPage() {
                       <CheckCircle2 className="w-3 h-3" />
                       {agency.status}
                     </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    {(() => {
+                      const exp = getExpirationStatus(agency);
+                      return (
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black border ${
+                          exp.color === 'green' ? 'bg-green-50 text-green-700 border-green-100' :
+                          exp.color === 'amber' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                          exp.color === 'red' ? 'bg-red-50 text-red-700 border-red-100' :
+                          'bg-slate-50 text-slate-500 border-slate-100'
+                        }`}>
+                          <Clock className="w-3 h-3" />
+                          {exp.label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   {(user?.role === 'officer' || user?.role === 'director' || user?.role === 'general_director') && (
                     <td className="px-6 py-4">

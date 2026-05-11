@@ -63,7 +63,13 @@ export default function ApprovalsPage() {
         }
         if (changesRes.ok) {
           const changesData = await changesRes.json();
-          setAgencyChanges(Array.isArray(changesData) ? changesData : []);
+          const normalizedChanges = (Array.isArray(changesData) ? changesData : []).map((change: any) => {
+            return {
+              ...change,
+              data: typeof change.data === 'string' ? JSON.parse(change.data) : (change.data || {})
+            };
+          });
+          setAgencyChanges(normalizedChanges);
         }
       } catch { /* ignore */ }
     }
@@ -100,11 +106,16 @@ export default function ApprovalsPage() {
           city: selectedApp.district,
           region: selectedApp.region,
           status: 'Active',
-          contact_person: selectedApp.contactPerson,
+          contact_person: selectedApp.contact_person || selectedApp.contactPerson,
           phone: selectedApp.phone,
           email: selectedApp.email,
+          alternate_name: selectedApp.alternate_name || (selectedApp.alternate_person?.name || selectedApp.alternatePerson?.name),
+          alternate_phone: selectedApp.alternate_phone || (selectedApp.alternate_person?.phone || selectedApp.alternatePerson?.phone),
+          business_structure: selectedApp.business_structure || 'solo',
           issue_date: formattedIssueDate,
           expiry_date: formattedExpiryDate,
+          docs: selectedApp.uploadedDocs || selectedApp.uploaded_docs,
+          doc_file_data: selectedApp.docFileData || selectedApp.doc_file_data,
           registered_by: user?.name || selectedApp.registeredBy || `${selectedApp.region || 'HQ'}-officer`,
           print_count: 0
         };
@@ -147,6 +158,7 @@ export default function ApprovalsPage() {
       app_fee: selectedApp.financials.appFee,
       discount: selectedApp.financials.discount,
       paid_amount: selectedApp.financials.paidAmount,
+      received_amount: selectedApp.financials.receivedAmount || 0,
       total_due: selectedApp.financials.totalDue
     };
     await fetch('/api/data', { 
@@ -616,6 +628,10 @@ export default function ApprovalsPage() {
                     </h4>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-sm">
+                        <p className="text-slate-400 font-medium">Business Structure</p>
+                        <p className="font-bold text-slate-900 uppercase">{selectedApp.business_structure || 'Solo Proprietor'}</p>
+                      </div>
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-sm">
                         <p className="text-slate-400 font-medium">License Type</p>
                         <p className="font-bold text-slate-900">{selectedApp.type}</p>
                       </div>
@@ -623,6 +639,18 @@ export default function ApprovalsPage() {
                         <p className="text-slate-400 font-medium">Submission Date</p>
                         <p className="font-bold text-slate-900">{selectedApp.date}</p>
                       </div>
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-sm col-span-2">
+                        <p className="text-slate-400 font-medium uppercase text-[10px] mb-1">Primary Contact</p>
+                        <p className="font-bold text-slate-900">{selectedApp.contact_person || selectedApp.contactPerson}</p>
+                        <p className="text-xs text-slate-500">{selectedApp.phone} • {selectedApp.email}</p>
+                      </div>
+                      {(selectedApp.alternate_name || selectedApp.alternate_person || selectedApp.alternatePerson) && (
+                        <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 text-sm col-span-2">
+                          <p className="text-amber-600 font-bold uppercase text-[10px] mb-1">Alternate Contact</p>
+                          <p className="font-bold text-slate-900">{selectedApp.alternate_name || selectedApp.alternate_person?.name || selectedApp.alternatePerson?.name}</p>
+                          <p className="text-xs text-slate-600">{selectedApp.alternate_phone || selectedApp.alternate_person?.phone || selectedApp.alternatePerson?.phone}</p>
+                        </div>
+                      )}
                     </div>
                   </section>
 
@@ -649,7 +677,7 @@ export default function ApprovalsPage() {
                       <DollarSign className="w-5 h-5 text-green-600" />
                       Financial Assessment
                     </h4>
-                    {(user?.role === 'director' || user?.role === 'general_director') && selectedApp.status !== 'Approved' && (
+                    {(user?.role === 'director' || user?.role === 'general_director' || user?.role === 'officer') && selectedApp.status !== 'Approved' && (
                       <button 
                         onClick={handleUpdateFinancials}
                         className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:bg-blue-50 px-2 py-1 rounded"
@@ -685,24 +713,27 @@ export default function ApprovalsPage() {
                               className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm text-red-600"
                             />
                           ) : (
-                            <p className="font-bold text-red-600">-${selectedApp.financials.discount}</p>
+                            <p className="font-bold text-red-600">-${selectedApp.financials.discount || 0}</p>
                           )}
                         </div>
                         <div className="space-y-1">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase">Paid Amount</p>
-                          {(user?.role === 'director' || user?.role === 'general_director') && selectedApp.status !== 'Approved' ? (
+                          <p className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                            Received Amount
+                            {user?.role === 'officer' && <span className="text-[8px] bg-blue-100 text-blue-600 px-1 rounded uppercase">Officer</span>}
+                          </p>
+                          {(user?.role === 'director' || user?.role === 'general_director' || user?.role === 'officer') && selectedApp.status !== 'Approved' ? (
                             <input 
                               type="number"
-                              value={selectedApp.financials.paidAmount}
+                              value={selectedApp.financials.receivedAmount || selectedApp.financials.paidAmount || 0}
                               onChange={(e) => {
                                 const val = Number(e.target.value);
-                                const newApp = { ...selectedApp, financials: { ...selectedApp.financials, paidAmount: val } };
+                                const newApp = { ...selectedApp, financials: { ...selectedApp.financials, receivedAmount: val, paidAmount: val } };
                                 setSelectedApp(newApp);
                               }}
                               className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm text-green-600"
                             />
                           ) : (
-                            <p className="font-bold text-green-600">${selectedApp.financials.paidAmount}</p>
+                            <p className="font-bold text-green-600">${selectedApp.financials.receivedAmount || selectedApp.financials.paidAmount || 0}</p>
                           )}
                         </div>
                       </div>
