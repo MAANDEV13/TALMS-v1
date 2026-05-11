@@ -65,6 +65,7 @@ function NewApplicationPageContent() {
   const [uploadedDocs, setUploadedDocs] = useState<string[]>([]);
   const [docFileNames, setDocFileNames] = useState<Record<string, string>>({});
   const [docFileData, setDocFileData] = useState<Record<string, string>>({});
+  const [agencyLogoPreview, setAgencyLogoPreview] = useState<string | null>(null);
   const [ownerPhotoPreview, setOwnerPhotoPreview] = useState<string | null>(null);
   const [paymentReceiptFile, setPaymentReceiptFile] = useState<string | null>(null);
   const [grSerial, setGrSerial] = useState('');
