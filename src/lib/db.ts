@@ -111,12 +111,14 @@ export async function getActivities() {
 }
 
 export async function logActivity(userName: string, action: string, target: string) {
+  // Use GMT+3 (East Africa Time) for all timestamps
   const now = new Date();
+  const gmt3Options = { timeZone: 'Africa/Nairobi' } as const;
   await d1Execute(
     'INSERT INTO activities (id, user_name, action, target, time, date) VALUES (?, ?, ?, ?, ?, ?)',
     [crypto.randomUUID(), userName, action, target,
-     now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-     now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })]
+     now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', ...gmt3Options }),
+     now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', ...gmt3Options })]
   );
 }
 
@@ -237,7 +239,9 @@ export async function saveSetting(key: string, value: string) {
 // ─── Utilities ──────────────────────────────────────────────────────
 
 export async function getNextLicenseId() {
-  const currentYear = new Date().getFullYear();
+  // Use GMT+3 year
+  const gmt3Now = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  const currentYear = gmt3Now.getUTCFullYear();
   const rows = await d1Query("SELECT COUNT(*) as count FROM agencies WHERE license_id LIKE ?", [`%/${currentYear}`]);
   const count = (rows[0]?.count || 0) + 1;
   return `${String(count).padStart(3, '0')}-MOCAAD-DCA/${currentYear}`;

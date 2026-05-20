@@ -27,7 +27,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { MOCK_DB } from '@/lib/mockDb';
 import { useAuth } from '@/context/AuthContext';
 
 export default function AgencyDetailPage() {
@@ -129,9 +128,30 @@ export default function AgencyDetailPage() {
             <ArrowLeft className="w-5 h-5 text-slate-500" />
           </button>
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center shadow-xl border-4 border-white shrink-0">
-              <span className="text-2xl font-black text-white uppercase">{agency.name[0]}</span>
-            </div>
+            {(() => {
+              const docData = typeof agency.doc_file_data === 'string' ? (() => { try { return JSON.parse(agency.doc_file_data); } catch { return {}; } })() : (agency.doc_file_data || {});
+              const logoKey = docData?.agency_logo;
+              if (logoKey) {
+                return (
+                  <>
+                    <img
+                      src={logoKey.startsWith('http') ? logoKey : `/api/storage?key=${encodeURIComponent(logoKey)}`}
+                      alt={agency.name}
+                      className="w-16 h-16 rounded-2xl object-cover shadow-xl border-4 border-white shrink-0"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }}
+                    />
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center shadow-xl border-4 border-white shrink-0 hidden">
+                      <span className="text-2xl font-black text-white uppercase">{agency.name[0]}</span>
+                    </div>
+                  </>
+                );
+              }
+              return (
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center shadow-xl border-4 border-white shrink-0">
+                  <span className="text-2xl font-black text-white uppercase">{agency.name[0]}</span>
+                </div>
+              );
+            })()}
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-3xl font-bold text-slate-900">{agency.name}</h1>
@@ -264,7 +284,11 @@ export default function AgencyDetailPage() {
                 });
               }
 
-              MOCK_DB.logActivity(user?.name || 'User', 'Exported agency data for', agency.name);
+              fetch('/api/data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'User', action: 'Exported agency data for', target: agency.name } })
+              });
             }}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all"
           >
@@ -618,9 +642,9 @@ export default function AgencyDetailPage() {
                           <div className="flex flex-col items-end">
                             <div className="flex items-center gap-1.5 text-slate-900 font-black text-sm">
                               <Clock className="w-3.5 h-3.5 text-slate-400" />
-                              {log.created_at ? new Date(log.created_at).toLocaleTimeString() : (log.time || '')}
+                              {log.created_at ? new Date(log.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Nairobi' }) : (log.time || '')}
                             </div>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">{log.created_at ? new Date(log.created_at).toLocaleDateString() : (log.date || '')}</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">{log.created_at ? new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Africa/Nairobi' }) : (log.date || '')}</p>
                           </div>
                         </td>
                       </tr>

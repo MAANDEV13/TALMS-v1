@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   History, 
   Search, 
@@ -11,26 +11,60 @@ import {
   FileText, 
   Building2,
   AlertCircle,
-  ArrowRight
+  ArrowRight,
+  RefreshCw
 } from 'lucide-react';
-import { MOCK_DB } from '@/lib/mockDb';
 import { useAuth } from '@/context/AuthContext';
 
 export default function ActivitiesPage() {
   const { user } = useAuth();
   const [activities, setActivities] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-
   const [filterAction, setFilterAction] = useState('All');
+  const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+
+  const loadActivities = useCallback(async () => {
+    try {
+      const res = await fetch('/api/data?table=activities');
+      if (res.ok) {
+        const data = await res.json();
+        setActivities(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error('Failed to load activities:', err);
+    }
+    setLoading(false);
+    setLastRefresh(new Date());
+  }, []);
 
   useEffect(() => {
-    MOCK_DB.init();
-    setActivities(MOCK_DB.get('activities') || []);
-  }, []);
+    loadActivities();
+  }, [loadActivities]);
+
+  // Auto-refresh every 10 seconds for real-time updates
+  useEffect(() => {
+    const interval = setInterval(loadActivities, 10000);
+    return () => clearInterval(interval);
+  }, [loadActivities]);
+
+  // Format time in GMT+3
+  const formatGMT3 = (dateStr: string) => {
+    if (!dateStr) return { time: '', date: '' };
+    try {
+      const d = new Date(dateStr);
+      return {
+        time: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Nairobi' }),
+        date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Africa/Nairobi' })
+      };
+    } catch {
+      return { time: dateStr, date: '' };
+    }
+  };
 
   const filteredActivities = activities.filter(a => {
     const searchMatch = 
-      (a.user || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.user || a.user_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (a.action || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (a.target || '').toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -50,10 +84,26 @@ export default function ActivitiesPage() {
           <h1 className="text-3xl font-bold text-slate-900">System Audit Logs</h1>
           <p className="text-slate-500 mt-1">Chronological record of all administrative actions and security events.</p>
         </div>
-        <div className="flex bg-slate-900 border border-slate-800 rounded-2xl px-4 py-2 gap-3 items-center shadow-xl shadow-slate-900/10">
-          <ShieldCheck className="w-5 h-5 text-blue-400" />
-          <p className="text-sm font-bold text-blue-100 uppercase tracking-widest">Audit Mode Active</p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={loadActivities}
+            className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all active:scale-95"
+            title="Refresh now"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+          <div className="flex bg-slate-900 border border-slate-800 rounded-2xl px-4 py-2 gap-3 items-center shadow-xl shadow-slate-900/10">
+            <ShieldCheck className="w-5 h-5 text-blue-400" />
+            <p className="text-sm font-bold text-blue-100 uppercase tracking-widest">Audit Mode Active</p>
+          </div>
         </div>
+      </div>
+
+      {/* Auto-refresh indicator */}
+      <div className="flex items-center gap-2 text-xs text-slate-400">
+        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+        <span>Live — auto-refreshing every 10s • Last update: {lastRefresh.toLocaleTimeString('en-US', { timeZone: 'Africa/Nairobi' })}</span>
       </div>
 
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
@@ -94,7 +144,18 @@ export default function ActivitiesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filteredActivities.map((log) => (
+              {loading ? (
+                <tr>
+                  <td colSpan={3} className="px-6 py-20 text-center">
+                    <div className="space-y-4">
+                      <RefreshCw className="w-8 h-8 text-blue-400 mx-auto animate-spin" />
+                      <p className="text-slate-400 font-medium">Loading audit logs...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredActivities.map((log) => {
+                const ts = formatGMT3(log.created_at);
+                return (
                 <tr key={log.id} className="hover:bg-slate-50 transition-colors group">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -102,7 +163,7 @@ export default function ActivitiesPage() {
                         <User className="w-5 h-5 text-slate-400 group-hover:text-blue-500" />
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-slate-900 leading-tight">{log.user}</p>
+                        <p className="text-sm font-bold text-slate-900 leading-tight">{log.user || log.user_name}</p>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Authorized Session</p>
                       </div>
                     </div>
@@ -118,14 +179,14 @@ export default function ActivitiesPage() {
                     <div className="flex flex-col items-end">
                       <div className="flex items-center gap-1.5 text-slate-900 font-black text-sm">
                         <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        {log.time}
+                        {ts.time || log.time}
                       </div>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">{log.date}</p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">{ts.date || log.date}</p>
                     </div>
                   </td>
                 </tr>
-              ))}
-              {filteredActivities.length === 0 && (
+              )})}
+              {!loading && filteredActivities.length === 0 && (
                 <tr>
                   <td colSpan={3} className="px-6 py-20 text-center">
                     <div className="space-y-4">

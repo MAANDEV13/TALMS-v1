@@ -70,16 +70,65 @@ export async function POST(req: NextRequest) {
         if (action === 'create') {
           data.registered_by = user.name;
           await db.createAgency(data);
+          // Notify admin & GD about new agency registration
+          try {
+            await db.createNotification({
+              title: 'New Agency Registered',
+              message: `${data.name} — registered by ${user.name}`,
+              type: 'system',
+              role: 'admin',
+              link: '/agencies'
+            });
+            await db.createNotification({
+              title: 'New Agency Registered',
+              message: `${data.name} — registered by ${user.name}`,
+              type: 'system',
+              role: 'general_director',
+              link: '/agencies'
+            });
+          } catch (e) { /* non-blocking */ }
         }
-        else if (action === 'update') await db.updateAgency(data.id, data.fields);
-        else if (action === 'delete') await db.deleteAgency(data.id);
+        else if (action === 'update') {
+          await db.updateAgency(data.id, data.fields);
+          // Notify about agency updates
+          try {
+            const fieldNames = Object.keys(data.fields || {}).join(', ');
+            await db.createNotification({
+              title: 'Agency Record Updated',
+              message: `Fields updated: ${fieldNames} — by ${user.name}`,
+              type: 'system',
+              role: 'admin',
+              link: '/agencies'
+            });
+          } catch (e) { /* non-blocking */ }
+        }
+        else if (action === 'delete') {
+          await db.deleteAgency(data.id);
+          // Notify about agency deletion
+          try {
+            await db.createNotification({
+              title: 'Agency Deleted',
+              message: `An agency record was deleted by ${user.name}`,
+              type: 'alert',
+              role: 'admin',
+              link: '/agencies'
+            });
+            await db.createNotification({
+              title: 'Agency Deleted',
+              message: `An agency record was deleted by ${user.name}`,
+              type: 'alert',
+              role: 'general_director',
+              link: '/agencies'
+            });
+          } catch (e) { /* non-blocking */ }
+        }
         break;
       }
       case 'applications': {
         if (action === 'create') {
           data.registered_by = user.name;
           await db.createApplication(data);
-          // Auto-notify director + GD about new application
+          // Auto-notify director + GD + admin about new application
           try {
             await db.createNotification({
               title: `New ${data.type || 'Application'} Submitted`,
@@ -95,6 +144,13 @@ export async function POST(req: NextRequest) {
               role: 'general_director',
               link: '/approvals'
             });
+            await db.createNotification({
+              title: `New ${data.type || 'Application'} Submitted`,
+              message: `${data.agency} — submitted by ${user.name}`,
+              type: 'approval',
+              role: 'admin',
+              link: '/licenses'
+            });
           } catch (e) { /* notification failures shouldn't block application creation */ }
         }
         else if (action === 'update') {
@@ -104,9 +160,17 @@ export async function POST(req: NextRequest) {
             try {
               await db.createNotification({
                 title: `Application Status Updated`,
-                message: `Status changed to: ${data.fields.status}`,
+                message: `Status changed to: ${data.fields.status} — by ${user.name}`,
                 type: 'system',
+                role: 'admin',
                 link: '/licenses'
+              });
+              await db.createNotification({
+                title: `Application Status Updated`,
+                message: `Status changed to: ${data.fields.status} — by ${user.name}`,
+                type: 'system',
+                role: 'general_director',
+                link: '/approvals'
               });
             } catch (e) { /* non-blocking */ }
           }
@@ -115,15 +179,65 @@ export async function POST(req: NextRequest) {
         break;
       }
       case 'activities': {
-        if (action === 'log') await db.logActivity(data.user, data.action, data.target);
+        if (action === 'log') {
+          await db.logActivity(data.user, data.action, data.target);
+          // Generate notification for admin on every audit log entry
+          try {
+            await db.createNotification({
+              title: `Audit Log: ${data.action}`,
+              message: `${data.user} — ${data.action} ${data.target}`,
+              type: 'system',
+              role: 'admin',
+              link: '/activities'
+            });
+          } catch (e) { /* non-blocking */ }
+        }
         break;
       }
       case 'fines': {
-        if (action === 'create') await db.createFine(data);
+        if (action === 'create') {
+          await db.createFine(data);
+          // Notify admin & GD about new fine
+          try {
+            await db.createNotification({
+              title: 'New Fine Issued',
+              message: `$${data.amount} fine for ${data.agency_name} — issued by ${data.issued_by || user.name}`,
+              type: 'alert',
+              role: 'admin',
+              link: '/fines'
+            });
+            await db.createNotification({
+              title: 'New Fine Issued',
+              message: `$${data.amount} fine for ${data.agency_name} — issued by ${data.issued_by || user.name}`,
+              type: 'alert',
+              role: 'general_director',
+              link: '/fines'
+            });
+          } catch (e) { /* non-blocking */ }
+        }
         break;
       }
       case 'agency_changes': {
-        if (action === 'create') await db.createAgencyChange(data);
+        if (action === 'create') {
+          await db.createAgencyChange(data);
+          // Notify GD about pending agency change request
+          try {
+            await db.createNotification({
+              title: `Agency ${data.type === 'delete' ? 'Deletion' : 'Edit'} Request`,
+              message: `${data.requester} requested a ${data.type} for agency ${data.agency_id}`,
+              type: 'approval',
+              role: 'general_director',
+              link: '/approvals'
+            });
+            await db.createNotification({
+              title: `Agency Change Request Submitted`,
+              message: `${data.requester} submitted a ${data.type} request`,
+              type: 'system',
+              role: 'admin',
+              link: '/approvals'
+            });
+          } catch (e) { /* non-blocking */ }
+        }
         else if (action === 'delete') await db.deleteAgencyChange(data.id);
         break;
       }

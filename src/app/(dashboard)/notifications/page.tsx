@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Bell, 
   Clock, 
@@ -29,19 +29,65 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [dgReminders, setDgReminders] = useState<any[]>([]);
   const router = useRouter();
+  const prevUnreadRef = useRef(-1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Initialize audio for notification sound
+  useEffect(() => {
+    audioRef.current = new Audio('/notification.mp3');
+    audioRef.current.volume = 0.5;
+  }, []);
+
+  const playNotificationSound = useCallback(() => {
+    try {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(() => {
+          // Fallback: Web Audio API chime
+          try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const osc1 = ctx.createOscillator();
+            const osc2 = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc1.type = 'sine';
+            osc2.type = 'sine';
+            osc1.frequency.setValueAtTime(1047, ctx.currentTime);
+            osc2.frequency.setValueAtTime(1319, ctx.currentTime);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+            osc1.connect(gain);
+            osc2.connect(gain);
+            gain.connect(ctx.destination);
+            osc1.start();
+            osc2.start();
+            osc1.stop(ctx.currentTime + 0.3);
+            osc2.stop(ctx.currentTime + 0.3);
+          } catch (e) {}
+        });
+      }
+    } catch (e) {}
+  }, []);
   
   const loadNotifications = useCallback(async () => {
     try {
       const res = await fetch('/api/data?table=notifications');
       if (res.ok) {
         const data = await res.json();
-        setNotifications(Array.isArray(data) ? data : []);
+        const arr = Array.isArray(data) ? data : [];
+        setNotifications(arr);
+        
+        // Play sound if unread count increased
+        const unread = arr.filter((n: any) => n.unread === 1 || n.unread === true).length;
+        if (unread > prevUnreadRef.current && prevUnreadRef.current !== -1) {
+          playNotificationSound();
+        }
+        prevUnreadRef.current = unread;
       }
     } catch (err) {
       console.error('Failed to load notifications');
     }
     setLoading(false);
-  }, []);
+  }, [playNotificationSound]);
 
   // Load DG reminders
   const loadDgReminders = useCallback(async () => {
@@ -136,9 +182,9 @@ export default function NotificationsPage() {
     loadDgReminders();
   }, [loadNotifications, loadDgReminders]);
 
-  // Auto-refresh
+  // Auto-refresh every 10s for real-time updates
   useEffect(() => {
-    const interval = setInterval(loadNotifications, 30000);
+    const interval = setInterval(loadNotifications, 10000);
     return () => clearInterval(interval);
   }, [loadNotifications]);
 
@@ -188,7 +234,11 @@ export default function NotificationsPage() {
 
   const getTimeAgo = (dateStr: string) => {
     if (!dateStr) return '';
-    const diff = Date.now() - new Date(dateStr).getTime();
+    // Use GMT+3 timezone for time calculation
+    const created = new Date(dateStr);
+    const nowGMT3 = new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));
+    const createdGMT3 = new Date(created.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));
+    const diff = nowGMT3.getTime() - createdGMT3.getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return 'Just now';
     if (mins < 60) return `${mins}m ago`;
@@ -196,7 +246,7 @@ export default function NotificationsPage() {
     if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
     if (days < 7) return `${days}d ago`;
-    return new Date(dateStr).toLocaleDateString();
+    return created.toLocaleDateString('en-US', { timeZone: 'Africa/Nairobi' });
   };
 
   const filteredNotifications = notifications.filter(n => {

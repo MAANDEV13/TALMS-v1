@@ -103,7 +103,7 @@ export function Header() {
 
     prevUnreadRef.current = -1; // First load marker
     fetchNotifs();
-    const interval = setInterval(fetchNotifs, 15000); // Poll every 15s
+    const interval = setInterval(fetchNotifs, 8000); // Poll every 8s for real-time feel
     return () => clearInterval(interval);
   }, [playNotificationSound]);
 
@@ -208,7 +208,11 @@ export function Header() {
 
   const getTimeAgo = (dateStr: string) => {
     if (!dateStr) return '';
-    const diff = Date.now() - new Date(dateStr).getTime();
+    // Compute time difference accounting for GMT+3
+    const created = new Date(dateStr);
+    const nowGMT3 = new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));
+    const createdGMT3 = new Date(created.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));
+    const diff = nowGMT3.getTime() - createdGMT3.getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return 'Just now';
     if (mins < 60) return `${mins}m ago`;
