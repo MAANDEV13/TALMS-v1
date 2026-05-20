@@ -22,12 +22,23 @@ export async function GET(req: NextRequest) {
     switch (table) {
       case 'agencies':
         return NextResponse.json(await db.getAgencies());
-      case 'applications':
-        return NextResponse.json(await db.getApplications());
+      case 'applications': {
+        const apps = await db.getApplications();
+        // Hide financial fields from non-admin/director
+        const canSeeFinancials = ['admin', 'director'].includes(user.role);
+        if (!canSeeFinancials) {
+          const sanitized = (apps as any[]).map((app: any) => {
+            const { received_amount, paid_amount, ...rest } = app;
+            return rest;
+          });
+          return NextResponse.json(sanitized);
+        }
+        return NextResponse.json(apps);
+      }
       case 'activities':
         return NextResponse.json(await db.getActivities());
       case 'notifications':
-        return NextResponse.json(await db.getNotifications());
+        return NextResponse.json(await db.getNotificationsForUser(user.sub, user.role));
       case 'fines':
         return NextResponse.json(await db.getFines());
       case 'agency_changes':
@@ -68,8 +79,38 @@ export async function POST(req: NextRequest) {
         if (action === 'create') {
           data.registered_by = user.name;
           await db.createApplication(data);
+          // Auto-notify director + GD about new application
+          try {
+            await db.createNotification({
+              title: `New ${data.type || 'Application'} Submitted`,
+              message: `${data.agency} — submitted by ${user.name}`,
+              type: 'approval',
+              role: 'director',
+              link: '/approvals'
+            });
+            await db.createNotification({
+              title: `New ${data.type || 'Application'} Submitted`,
+              message: `${data.agency} — submitted by ${user.name}`,
+              type: 'approval',
+              role: 'general_director',
+              link: '/approvals'
+            });
+          } catch (e) { /* notification failures shouldn't block application creation */ }
         }
-        else if (action === 'update') await db.updateApplication(data.id, data.fields);
+        else if (action === 'update') {
+          await db.updateApplication(data.id, data.fields);
+          // Auto-notify when status changes
+          if (data.fields?.status) {
+            try {
+              await db.createNotification({
+                title: `Application Status Updated`,
+                message: `Status changed to: ${data.fields.status}`,
+                type: 'system',
+                link: '/licenses'
+              });
+            } catch (e) { /* non-blocking */ }
+          }
+        }
         else if (action === 'delete') await db.deleteApplication(data.id);
         break;
       }
@@ -87,7 +128,10 @@ export async function POST(req: NextRequest) {
         break;
       }
       case 'notifications': {
-        if (action === 'clear') await db.clearNotifications();
+        if (action === 'create') await db.createNotification(data);
+        else if (action === 'markRead') await db.markNotificationRead(data.id);
+        else if (action === 'markAllRead') await db.markAllNotificationsRead(user.sub, user.role);
+        else if (action === 'clear') await db.clearNotifications();
         break;
       }
       case 'settings': {

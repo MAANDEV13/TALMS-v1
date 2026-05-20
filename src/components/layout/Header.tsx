@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Bell, Search, User, Settings, LogOut, ChevronDown, Building2, FileText } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Bell, Search, User, Settings, LogOut, ChevronDown, Building2, FileText, Check, Volume2, VolumeX } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -16,10 +16,52 @@ export function Header() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [recentNotifs, setRecentNotifs] = useState<any[]>([]);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const searchRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const prevUnreadRef = useRef(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Initialize audio
+  useEffect(() => {
+    audioRef.current = new Audio('/notification.mp3');
+    audioRef.current.volume = 0.5;
+    // Load sound preference
+    const saved = localStorage.getItem('talms-sound-enabled');
+    if (saved !== null) setSoundEnabled(saved === 'true');
+  }, []);
+
+  const playNotificationSound = useCallback(() => {
+    if (!soundEnabled) return;
+    try {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(() => {
+          // Fallback: Web Audio API chime
+          try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const osc1 = ctx.createOscillator();
+            const osc2 = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc1.type = 'sine';
+            osc2.type = 'sine';
+            osc1.frequency.setValueAtTime(1047, ctx.currentTime);
+            osc2.frequency.setValueAtTime(1319, ctx.currentTime);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+            osc1.connect(gain);
+            osc2.connect(gain);
+            gain.connect(ctx.destination);
+            osc1.start();
+            osc2.start();
+            osc1.stop(ctx.currentTime + 0.3);
+            osc2.stop(ctx.currentTime + 0.3);
+          } catch (e) {}
+        });
+      }
+    } catch (e) {}
+  }, [soundEnabled]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -45,36 +87,58 @@ export function Header() {
         .then(r => r.ok ? r.json() : [])
         .then(notifs => {
           const arr = Array.isArray(notifs) ? notifs : [];
-          const unread = arr.filter((n: any) => n.unread !== false).length;
+          const unread = arr.filter((n: any) => n.unread === 1 || n.unread === true).length;
           setUnreadCount(unread);
-          setRecentNotifs(arr.slice(0, 5)); // Show top 5 in dropdown
+          setRecentNotifs(arr.slice(0, 8));
 
           // Play sound if unread count increased
-          if (unread > prevUnreadRef.current && prevUnreadRef.current !== 0) {
-            try {
-              const audio = new Audio('/notification.mp3');
-              // Basic fallback pop sound if file doesn't exist
-              audio.onerror = () => {
-                const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                const osc = ctx.createOscillator();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
-                osc.connect(ctx.destination);
-                osc.start();
-                osc.stop(ctx.currentTime + 0.1);
-              };
-              audio.play().catch(() => {});
-            } catch (e) {}
+          if (unread > prevUnreadRef.current && prevUnreadRef.current !== -1) {
+            playNotificationSound();
           }
-          prevUnreadRef.current = unread;
+          if (prevUnreadRef.current === -1) prevUnreadRef.current = unread;
+          else prevUnreadRef.current = unread;
         })
         .catch(() => setUnreadCount(0));
     };
 
+    prevUnreadRef.current = -1; // First load marker
     fetchNotifs();
-    const interval = setInterval(fetchNotifs, 30000); // Poll every 30s
+    const interval = setInterval(fetchNotifs, 15000); // Poll every 15s
     return () => clearInterval(interval);
-  }, []);
+  }, [playNotificationSound]);
+
+  // Mark single notification as read
+  const markAsRead = async (id: string) => {
+    try {
+      await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table: 'notifications', action: 'markRead', data: { id } })
+      });
+      setRecentNotifs(prev => prev.map(n => n.id === id ? { ...n, unread: 0 } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (e) {}
+  };
+
+  // Mark all as read
+  const markAllAsRead = async () => {
+    try {
+      await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table: 'notifications', action: 'markAllRead', data: {} })
+      });
+      setRecentNotifs(prev => prev.map(n => ({ ...n, unread: 0 })));
+      setUnreadCount(0);
+    } catch (e) {}
+  };
+
+  // Toggle sound
+  const toggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    localStorage.setItem('talms-sound-enabled', String(next));
+  };
 
   // Live search
   useEffect(() => {
@@ -97,9 +161,9 @@ export function Header() {
     const agencyMatches = agencies
       .filter((a: any) =>
         (a.name || '').toLowerCase().includes(term) ||
-        (a.licenseId || '').toLowerCase().includes(term) ||
+        (a.licenseId || a.license_id || '').toLowerCase().includes(term) ||
         (a.region || '').toLowerCase().includes(term) ||
-        (a.contactPerson || '').toLowerCase().includes(term)
+        (a.contactPerson || a.contact_person || '').toLowerCase().includes(term)
       )
       .slice(0, 4)
       .map((a: any) => ({ ...a, _type: 'agency' }));
@@ -107,7 +171,7 @@ export function Header() {
     const appMatches = apps
       .filter((a: any) =>
         (a.agency || '').toLowerCase().includes(term) ||
-        (a.agencyId || '').toLowerCase().includes(term) ||
+        (a.agencyId || a.agency_id || '').toLowerCase().includes(term) ||
         (a.region || '').toLowerCase().includes(term)
       )
       .slice(0, 4)
@@ -130,6 +194,28 @@ export function Header() {
     } else {
       router.push('/licenses');
     }
+  };
+
+  const getNotifIcon = (type: string) => {
+    switch (type) {
+      case 'approval': return '✅';
+      case 'reminder': return '⏰';
+      case 'alert': return '⚠️';
+      case 'announcement': return '📢';
+      default: return '🔔';
+    }
+  };
+
+  const getTimeAgo = (dateStr: string) => {
+    if (!dateStr) return '';
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
   };
 
   return (
@@ -169,7 +255,7 @@ export function Header() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold text-slate-900 truncate">{result.name || result.agency}</p>
                     <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">
-                      {result._type === 'agency' ? `Agency • ${result.licenseId || ''}` : `Application • ${result.type || ''}`}
+                      {result._type === 'agency' ? `Agency • ${result.licenseId || result.license_id || ''}` : `Application • ${result.type || ''}`}
                       {result.region ? ` • ${result.region}` : ''}
                     </p>
                   </div>
@@ -201,24 +287,65 @@ export function Header() {
           </button>
 
           {showNotifications && (
-            <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-2xl shadow-slate-200/60 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="absolute top-full right-0 mt-2 w-96 bg-white border border-slate-200 rounded-xl shadow-2xl shadow-slate-200/60 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
                 <span className="text-sm font-bold text-slate-900">Notifications</span>
-                {unreadCount > 0 && (
-                  <span className="text-xs font-black text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">{unreadCount} New</span>
-                )}
+                <div className="flex items-center gap-2">
+                  {/* Sound toggle */}
+                  <button
+                    onClick={toggleSound}
+                    className={`p-1.5 rounded-lg transition-all ${soundEnabled ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-400 hover:bg-slate-100'}`}
+                    title={soundEnabled ? 'Sound on' : 'Sound off'}
+                  >
+                    {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                  </button>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={markAllAsRead}
+                      className="flex items-center gap-1 text-[10px] font-black text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-all uppercase tracking-wider"
+                    >
+                      <Check className="w-3 h-3" />
+                      Read All
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+              <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
                 {recentNotifs.length > 0 ? recentNotifs.map(n => (
-                  <div key={n.id} className={`p-4 hover:bg-slate-50 transition-colors ${n.unread !== false ? 'bg-blue-50/30' : ''}`}>
-                    <p className="text-sm font-bold text-slate-800 line-clamp-1">{n.title || n.message}</p>
-                    {n.title && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{n.message}</p>}
-                    <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-wider">{n.created_at ? new Date(n.created_at).toLocaleString() : n.time}</p>
+                  <div
+                    key={n.id}
+                    className={`p-4 hover:bg-slate-50 transition-colors cursor-pointer flex items-start gap-3 ${(n.unread === 1 || n.unread === true) ? 'bg-blue-50/40' : ''}`}
+                    onClick={() => {
+                      if (n.unread === 1 || n.unread === true) markAsRead(n.id);
+                      if (n.link) {
+                        setShowNotifications(false);
+                        router.push(n.link);
+                      }
+                    }}
+                  >
+                    <span className="text-lg shrink-0 mt-0.5">{getNotifIcon(n.type)}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className={`text-sm font-bold line-clamp-1 ${(n.unread === 1 || n.unread === true) ? 'text-slate-900' : 'text-slate-600'}`}>
+                          {n.title || n.message}
+                        </p>
+                        {(n.unread === 1 || n.unread === true) && (
+                          <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 mt-1.5"></span>
+                        )}
+                      </div>
+                      {n.title && n.message && (
+                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{n.message}</p>
+                      )}
+                      <p className="text-[10px] font-bold text-slate-400 mt-1.5 uppercase tracking-wider">
+                        {getTimeAgo(n.created_at)}
+                      </p>
+                    </div>
                   </div>
                 )) : (
-                  <div className="p-6 text-center text-slate-500">
+                  <div className="p-8 text-center text-slate-500">
                     <Bell className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                    <p className="text-sm">No new notifications</p>
+                    <p className="text-sm font-medium">No notifications</p>
+                    <p className="text-xs text-slate-400 mt-1">You're all caught up!</p>
                   </div>
                 )}
               </div>

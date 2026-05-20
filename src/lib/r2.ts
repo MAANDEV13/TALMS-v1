@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const r2Client = new S3Client({
@@ -35,4 +35,16 @@ export async function getDownloadUrl(key: string) {
   });
 
   return await getSignedUrl(r2Client, command, { expiresIn: 3600 }); // 1 hour
+}
+
+/**
+ * Deletes a file from R2 storage.
+ */
+export async function deleteObject(key: string) {
+  const command = new DeleteObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+  });
+
+  await r2Client.send(command);
 }

@@ -490,62 +490,16 @@ export default function AgencyDetailPage() {
            <div className="flex items-center justify-between mb-8">
               <div>
                 <h3 className="text-xl font-bold text-slate-900 uppercase tracking-tight">Agency Document Registry</h3>
-                <p className="text-sm text-slate-500 mt-1">Directly manage and replace official compliance files.</p>
+                <p className="text-sm text-slate-500 mt-1">Official compliance files for this agency.</p>
               </div>
-              <div className="flex gap-3">
-                <input type="file" id="manual-doc-upload" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  if (file.size > 5 * 1024 * 1024) { alert('File must be under 5MB'); e.target.value = ''; return; }
-                  const docName = prompt('Enter document name:', file.name.replace(/\.[^.]+$/, ''));
-                  if (!docName) { e.target.value = ''; return; }
-                  setUploadingDoc(true);
-                  try {
-                    const key = await uploadFileToR2(file, `agencies/${agency.name}/docs`);
-                    const updatedDocs = [...(agency.docs || []), docName];
-                    const updatedFileData = { ...(agency.doc_file_data || {}), [docName]: key };
-                    await fetch('/api/data', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ table: 'agencies', action: 'update', data: { id: agency.id, fields: { docs: JSON.stringify(updatedDocs), doc_file_data: JSON.stringify(updatedFileData) } } })
-                    });
-                    await fetch('/api/data', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'Admin', action: `Uploaded document: ${docName} (${file.name})`, target: agency.name } })
-                    });
-                    setAgency({ ...agency, docs: updatedDocs, doc_file_data: updatedFileData });
-                    setMessage(`Document "${docName}" uploaded successfully.`);
-                    setTimeout(() => setMessage(null), 4000);
-                  } catch (err) {
-                    alert('Failed to upload document.');
-                  }
-                  setUploadingDoc(false);
-                  e.target.value = '';
-                }} />
-                <label htmlFor="manual-doc-upload" className={`px-5 py-2.5 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 transition-all text-xs uppercase tracking-widest cursor-pointer flex items-center gap-2 active:scale-95 ${
-                  uploadingDoc ? 'bg-blue-400 cursor-wait' : 'bg-blue-600 hover:bg-blue-700'
-                }`}>
-                  {uploadingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  Upload Document
-                </label>
-                <button 
-                  onClick={async () => {
-                    const newDoc = prompt('Enter document placeholder name:');
-                    if (newDoc) {
-                      const updated = {...agency, docs: [...agency.docs, newDoc]};
-                      setAgency(updated);
-                      await fetch('/api/data', { 
-                        method: 'POST', 
-                        headers: { 'Content-Type': 'application/json' }, 
-                        body: JSON.stringify({ table: 'agencies', action: 'update', data: { id: agency.id, fields: { docs: JSON.stringify(updated.docs) } } }) 
-                      });
-                    }
-                  }}
-                  className="px-5 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all text-xs uppercase tracking-widest"
-                >
-                  + Placeholder
-                </button>
+            </div>
+
+            {/* Read-only notice */}
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-100 rounded-2xl flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-amber-900">Documents are managed through Applications</p>
+                <p className="text-xs text-amber-700 mt-0.5">To update or replace documents, submit an <Link href="/licenses/new" className="underline font-bold">Update Agency</Link> or <Link href="/licenses/new" className="underline font-bold">Renewal</Link> application.</p>
               </div>
             </div>
 
@@ -576,65 +530,6 @@ export default function AgencyDetailPage() {
                       })()}
                     </div>
                   </div>
-                  <input 
-                    type="file" 
-                    id={`replace-${i}`}
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        try {
-                          const key = await uploadFileToR2(file, `agencies/${agency.name}/updates`);
-                          
-                          if (user?.role === 'admin') {
-                            // Admin bypasses DG approval
-                            const updatedFileData = { ...(agency.doc_file_data || agency.docFileData || {}), [doc]: key };
-                            await fetch('/api/data', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ table: 'agencies', action: 'update', data: { id: agency.id, fields: { doc_file_data: JSON.stringify(updatedFileData) } } })
-                            });
-                            await fetch('/api/data', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'Admin', action: `Replaced document: ${doc}`, target: agency.name } })
-                            });
-                            setAgency({ ...agency, doc_file_data: updatedFileData });
-                            setMessage(`Document "${doc}" has been successfully replaced.`);
-                          } else {
-                            // Others need DG approval
-                            await fetch('/api/data', { 
-                              method: 'POST', 
-                              headers: { 'Content-Type': 'application/json' }, 
-                              body: JSON.stringify({ 
-                                table: 'agency_changes', 
-                                action: 'create', 
-                                data: { 
-                                  id: Math.random().toString(36).substr(2, 9),
-                                  agency_id: agency.license_id || agency.licenseId, 
-                                  type: 'edit', 
-                                  data: JSON.stringify({ document: doc, action: 'Replace File', fileName: file.name, r2Key: key }),
-                                  requester: user?.name || 'Officer',
-                                  date: new Date().toLocaleDateString()
-                                } 
-                              }) 
-                            });
-                            
-                            await fetch('/api/data', { 
-                              method: 'POST', 
-                              headers: { 'Content-Type': 'application/json' }, 
-                              body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'Officer', action: `Requested file replacement for: ${doc}`, target: agency.name } }) 
-                            });
-
-                            setMessage(`Your replacement request for "${doc}" has been sent to the General Director for approval.`);
-                          }
-                          setTimeout(() => setMessage(null), 5000);
-                        } catch (err) {
-                          alert('Failed to upload file for replacement.');
-                        }
-                      }
-                    }}
-                  />
                   <div className="flex gap-2">
                     <button
                       onClick={async () => {
@@ -666,13 +561,6 @@ export default function AgencyDetailPage() {
                     >
                       <Eye className="w-5 h-5" />
                     </button>
-                    <label 
-                      htmlFor={`replace-${i}`}
-                      className="px-4 py-2 bg-white border border-slate-200 text-blue-600 text-[10px] font-black uppercase rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Edit2 className="w-3 h-3" />
-                      Replace
-                    </label>
                   </div>
                 </div>
               ))}

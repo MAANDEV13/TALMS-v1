@@ -86,14 +86,47 @@ export default function ApprovalsPage() {
       const agencies = await fetch('/api/data?table=agencies').then(r => r.ok ? r.json() : []);
       const existingAgency = agencies.find((a: any) => a.name.toLowerCase() === selectedApp.agency.toLowerCase());
       
-      const issueDate = new Date(selectedApp.registerDate || new Date());
-      const formattedIssueDate = issueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      const expiryDateObj = new Date(issueDate);
-      expiryDateObj.setFullYear(expiryDateObj.getFullYear() + 1);
-      const formattedExpiryDate = expiryDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-      if (!existingAgency) {
-        // Generate new License ID: 001-MOCAAD-DCA/YYYY
+      const appType = selectedApp.type || '';
+      
+      if (appType === 'Update' && existingAgency) {
+        // For Update applications: apply changes to the existing agency
+        const updateFields: any = {};
+        if (selectedApp.district && selectedApp.district !== existingAgency.city) updateFields.city = selectedApp.district;
+        if (selectedApp.region && selectedApp.region !== existingAgency.region) updateFields.region = selectedApp.region;
+        if (selectedApp.contact_person || selectedApp.contactPerson) updateFields.contact_person = selectedApp.contact_person || selectedApp.contactPerson;
+        if (selectedApp.phone) updateFields.phone = selectedApp.phone;
+        if (selectedApp.email) updateFields.email = selectedApp.email;
+        if (selectedApp.alternate_name) updateFields.alternate_name = selectedApp.alternate_name;
+        if (selectedApp.alternate_phone) updateFields.alternate_phone = selectedApp.alternate_phone;
+        
+        // Merge documents if provided
+        if (selectedApp.uploadedDocs?.length > 0 || selectedApp.uploaded_docs?.length > 0) {
+          const existingDocs = typeof existingAgency.docs === 'string' ? JSON.parse(existingAgency.docs) : (existingAgency.docs || []);
+          const existingFileData = typeof existingAgency.doc_file_data === 'string' ? JSON.parse(existingAgency.doc_file_data) : (existingAgency.doc_file_data || {});
+          const newDocs = selectedApp.uploadedDocs || (typeof selectedApp.uploaded_docs === 'string' ? JSON.parse(selectedApp.uploaded_docs) : selectedApp.uploaded_docs) || [];
+          const newFileData = selectedApp.docFileData || (typeof selectedApp.doc_file_data === 'string' ? JSON.parse(selectedApp.doc_file_data) : selectedApp.doc_file_data) || {};
+          
+          const mergedDocs = [...new Set([...existingDocs, ...newDocs])];
+          const mergedFileData = { ...existingFileData, ...newFileData };
+          updateFields.docs = JSON.stringify(mergedDocs);
+          updateFields.doc_file_data = JSON.stringify(mergedFileData);
+        }
+        
+        if (Object.keys(updateFields).length > 0) {
+          await fetch('/api/data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'agencies', action: 'update', data: { id: existingAgency.id, fields: updateFields } }) });
+        }
+        assignedLicenseId = existingAgency.license_id || existingAgency.licenseId;
+        
+        // Log audit trail
+        await fetch('/api/data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'activities', action: 'log', data: { user: user?.name || 'GD', action: `Approved agency update: ${Object.keys(updateFields).join(', ')}`, target: selectedApp.agency } }) });
+      } else if (!existingAgency) {
+        // New agency creation
+        const issueDate = new Date(selectedApp.registerDate || new Date());
+        const formattedIssueDate = issueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const expiryDateObj = new Date(issueDate);
+        expiryDateObj.setFullYear(expiryDateObj.getFullYear() + 1);
+        const formattedExpiryDate = expiryDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        
         const currentYear = new Date().getFullYear();
         const yearAgencies = agencies.filter((a: any) => a.licenseId?.endsWith(`/${currentYear}`) || a.license_id?.endsWith(`/${currentYear}`));
         const count = yearAgencies.length + 1;
@@ -101,7 +134,7 @@ export default function ApprovalsPage() {
         
         const newAgency = {
           id: Math.random().toString(36).substr(2, 9),
-          license_id: assignedLicenseId, // Using db snake_case for consistency via API
+          license_id: assignedLicenseId,
           name: selectedApp.agency,
           city: selectedApp.district,
           region: selectedApp.region,
@@ -121,7 +154,12 @@ export default function ApprovalsPage() {
         };
         await fetch('/api/data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'agencies', action: 'create', data: newAgency }) });
       } else {
+        // Renewal — update expiry date
         assignedLicenseId = existingAgency.licenseId || existingAgency.license_id;
+        const issueDate = new Date();
+        const expiryDateObj = new Date(issueDate);
+        expiryDateObj.setFullYear(expiryDateObj.getFullYear() + 1);
+        await fetch('/api/data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ table: 'agencies', action: 'update', data: { id: existingAgency.id, fields: { expiry_date: expiryDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), issue_date: issueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) } } }) });
       }
     }
 

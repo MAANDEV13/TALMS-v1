@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { verifyJwt } from '@/lib/jwt';
-import { getUploadUrl, getDownloadUrl } from '@/lib/r2';
+import { getUploadUrl, getDownloadUrl, deleteObject } from '@/lib/r2';
 
 async function getUser() {
   const cookieStore = await cookies();
@@ -31,6 +31,14 @@ export async function POST(req: NextRequest) {
       }
       const url = await getDownloadUrl(key);
       return NextResponse.json({ url });
+    }
+
+    if (action === 'deleteFile') {
+      if (!key) {
+        return NextResponse.json({ error: 'Missing key' }, { status: 400 });
+      }
+      await deleteObject(key);
+      return NextResponse.json({ success: true });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

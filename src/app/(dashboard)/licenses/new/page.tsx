@@ -30,6 +30,8 @@ function NewApplicationPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const draftId = searchParams.get('id');
+  const urlType = searchParams.get('type');
+  const urlAgencyId = searchParams.get('agency');
   const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -96,7 +98,63 @@ function NewApplicationPageContent() {
     // Fetch live agencies
     fetch('/api/data?table=agencies')
       .then(res => res.ok ? res.json() : [])
-      .then(data => setAllAgencies(Array.isArray(data) ? data : []))
+      .then(data => {
+        const agencyList = Array.isArray(data) ? data : [];
+        setAllAgencies(agencyList);
+        
+        // Auto-select agency from URL param (e.g. from agencies list "Update" button)
+        if (urlAgencyId && (urlType === 'update' || urlType === 'renewal') && !selectedAgency) {
+          const found = agencyList.find((a: any) => a.id === urlAgencyId);
+          if (found) {
+            setType(urlType);
+            setSelectionMade(true);
+            setSelectedAgency(found);
+            setAgencyName(found.name);
+            setNameChecked(true);
+            setNameError(null);
+            // Auto-fill details
+            setRegion(found.region || '');
+            setDistrict(found.city || '');
+            setSecondName(found.contact_person || found.contactPerson || '');
+            setSecondPhone(found.phone || '');
+            setSecondEmail(found.email || '');
+            const aName = found.alternate_name || found.alternatePerson?.name || '';
+            const aPhone = found.alternate_phone || found.alternatePerson?.phone || '';
+            setAltName(aName);
+            setAltPhone(aPhone);
+            setOriginalAgencyData({
+              name: found.name,
+              region: found.region || '',
+              city: found.city || '',
+              contact_person: found.contact_person || found.contactPerson || '',
+              phone: found.phone || '',
+              email: found.email || '',
+              altName: aName,
+              altPhone: aPhone
+            });
+            // Load documents
+            const docData = typeof found.doc_file_data === 'string' ? (() => { try { return JSON.parse(found.doc_file_data); } catch { return {}; } })() : (found.doc_file_data || {});
+            const docsFound: string[] = [];
+            const fileNamesMap: Record<string, string> = {};
+            const fileDataMap: Record<string, string> = {};
+            Object.entries(docData).forEach(([key, val]) => {
+              if (val && typeof val === 'string') {
+                const displayName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                docsFound.push(displayName);
+                fileNamesMap[displayName] = (val as string).split('/').pop() || 'Existing File';
+                fileDataMap[displayName] = val as string;
+              }
+            });
+            setUploadedDocs(docsFound);
+            setDocFileNames(fileNamesMap);
+            setDocFileData(fileDataMap);
+          }
+        } else if (urlType && !urlAgencyId && !selectionMade) {
+          // Just set the type from URL (no agency pre-selected)
+          setType(urlType);
+          setSelectionMade(true);
+        }
+      })
       .catch(err => console.error('Failed to fetch agencies:', err));
 
     // 3. Load draft if ID exists (First Priority)
@@ -126,18 +184,16 @@ function NewApplicationPageContent() {
       }
     }
 
-    // 4. Auto-fill for Renewal (Second Priority)
-    if (type === 'renewal' && selectedAgency && !draftId) {
+    // 4. Auto-fill for Renewal or Update (Second Priority)
+    if ((type === 'renewal' || type === 'update') && selectedAgency && !draftId) {
       setAgencyName(selectedAgency.name);
       setRegion(selectedAgency.region || '');
       setDistrict(selectedAgency.city || '');
-      setSecondName(selectedAgency.contactPerson || '');
+      setSecondName(selectedAgency.contact_person || selectedAgency.contactPerson || '');
       setSecondPhone(selectedAgency.phone || '');
       setSecondEmail(selectedAgency.email || '');
-      if (selectedAgency.alternatePerson) {
-        setAltName(selectedAgency.alternatePerson.name || '');
-        setAltPhone(selectedAgency.alternatePerson.phone || '');
-      }
+      setAltName(selectedAgency.alternate_name || selectedAgency.alternatePerson?.name || '');
+      setAltPhone(selectedAgency.alternate_phone || selectedAgency.alternatePerson?.phone || '');
       setOriginalAgencyData({
         name: selectedAgency.name,
         region: selectedAgency.region || '',
@@ -149,7 +205,7 @@ function NewApplicationPageContent() {
         altPhone: selectedAgency.alternate_phone || selectedAgency.alternatePerson?.phone || ''
       });
     }
-  }, [user, router, draftId, type, selectedAgency]);
+  }, [user, router, draftId, type, selectedAgency, urlType, urlAgencyId]);
 
   const somalilandRegionsData: Record<string, string[]> = {
     'Maroodi Jeex': ['Hargeisa', 'Baligubadle', 'Salaxlay', 'Faraweyne', 'Sabawanaag', 'Caddaadlay', 'Daarasalaam', 'Allaybaday', 'Dacar Budhuq'],
@@ -179,8 +235,8 @@ function NewApplicationPageContent() {
   const handleNameCheck = (): boolean => {
     if (!agencyName) return false;
     
-    // For renewal, we just search for matching agencies
-    if (type === 'renewal') {
+    // For renewal or update, we just search for matching agencies
+    if (type === 'renewal' || type === 'update') {
       const matches = allAgencies.filter((a: any) => 
         (a.name || '').toLowerCase().includes(agencyName.toLowerCase()) ||
         (a.licenseId || a.license_id || '').toLowerCase().includes(agencyName.toLowerCase())
@@ -300,7 +356,7 @@ function NewApplicationPageContent() {
         }
       }
 
-      if (type === 'renewal') {
+      if (type === 'renewal' || type === 'update') {
         if (!selectedAgency) {
           setNameError('Please select an agency from the list first.');
           return;
@@ -313,6 +369,8 @@ function NewApplicationPageContent() {
 
     if (currentStep === 2) {
       // Item 13: Mandatory document validation on form submit
+      // TEMPORARY: Disabled document requirement
+      /*
       const allDocs = [
         'Application Letter (MOCAAD Format)',
         'Passport Photo of Owner/Manager',
@@ -333,6 +391,7 @@ function NewApplicationPageContent() {
         alert(`Please upload all mandatory documents before proceeding.\n\nMissing (${missing.length}):\n• ${missing.join('\n• ')}`);
         return;
       }
+      */
       setCurrentStep(3);
       return;
     }
@@ -341,6 +400,8 @@ function NewApplicationPageContent() {
       setIsSubmitting(true);
 
       // Item 13: Final validation of mandatory documents before submission
+      // TEMPORARY: Disabled document requirement
+      /*
       const mandatoryDocs = [
         'Application Letter (MOCAAD Format)',
         'Passport Photo of Owner/Manager',
@@ -363,6 +424,7 @@ function NewApplicationPageContent() {
         setIsSubmitting(false);
         return;
       }
+      */
 
       // Validate Agency Name manually
       const [appsRes, agenciesRes] = await Promise.all([
@@ -406,7 +468,7 @@ function NewApplicationPageContent() {
         alternate_name: altName,
         alternate_phone: altPhone,
         register_date: new Date().toISOString().split('T')[0],
-        type: type === 'new' ? 'New' : 'Renewal',
+        type: type === 'new' ? 'New' : type === 'update' ? 'Update' : 'Renewal',
         status: 'Under Review',
         status_color: 'amber',
         reg_fee: regFee,
@@ -456,7 +518,7 @@ function NewApplicationPageContent() {
           <p className="text-slate-500 text-lg">Select the type of application you wish to start.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
           <button 
             onClick={() => {
               setType('new');
@@ -468,11 +530,31 @@ function NewApplicationPageContent() {
               <Plus className="w-8 h-8 text-blue-600 group-hover:text-white" />
             </div>
             <div>
-              <h3 className="text-2xl font-bold text-slate-900">New Agency</h3>
-              <p className="text-slate-500 mt-2">Register a brand new travel agency for the first time in Somaliland.</p>
+              <h3 className="text-xl font-bold text-slate-900">New Agency</h3>
+              <p className="text-slate-500 mt-2 text-sm">Register a brand new travel agency for the first time.</p>
             </div>
-            <div className="flex items-center gap-2 text-blue-600 font-bold">
+            <div className="flex items-center gap-2 text-blue-600 font-bold text-sm">
               <span>Start Registration</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
+
+          <button 
+            onClick={() => {
+              setType('update');
+              setSelectionMade(true);
+            }}
+            className="group p-8 bg-white rounded-3xl border-2 border-slate-100 hover:border-green-600 hover:shadow-2xl hover:shadow-green-600/10 transition-all text-left space-y-6"
+          >
+            <div className="w-16 h-16 rounded-2xl bg-green-50 flex items-center justify-center group-hover:bg-green-600 transition-colors">
+              <Building2 className="w-8 h-8 text-green-600 group-hover:text-white" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-slate-900">Update Agency</h3>
+              <p className="text-slate-500 mt-2 text-sm">Modify details or documents for an existing registered agency.</p>
+            </div>
+            <div className="flex items-center gap-2 text-green-600 font-bold text-sm">
+              <span>Find & Update</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </button>
@@ -482,14 +564,14 @@ function NewApplicationPageContent() {
               setType('renewal');
               setSelectionMade(true);
             }}
-            className="group p-8 bg-white rounded-3xl border-2 border-slate-100 hover:border-blue-600 hover:shadow-2xl hover:shadow-blue-600/10 transition-all text-left space-y-6"
+            className="group p-8 bg-white rounded-3xl border-2 border-slate-100 hover:border-amber-500 hover:shadow-2xl hover:shadow-amber-500/10 transition-all text-left space-y-6"
           >
             <div className="w-16 h-16 rounded-2xl bg-amber-50 flex items-center justify-center group-hover:bg-amber-500 transition-colors">
               <History className="w-8 h-8 text-amber-600 group-hover:text-white" />
             </div>
             <div>
-              <h3 className="text-2xl font-bold text-slate-900">License Renewal</h3>
-              <p className="text-slate-500 mt-2">Extend an existing license for another year. Requires valid Agency ID.</p>
+              <h3 className="text-xl font-bold text-slate-900">License Renewal</h3>
+              <p className="text-slate-500 mt-2 text-sm">Extend an existing license for another year.</p>
             </div>
             <div className="flex items-center gap-2 text-amber-600 font-bold">
               <span>Find My Agency</span>
@@ -512,11 +594,13 @@ function NewApplicationPageContent() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            {type === 'new' ? 'New License Application' : 'License Renewal Application'}
+            {type === 'new' ? 'New License Application' : type === 'update' ? 'Update Agency Application' : 'License Renewal Application'}
           </h1>
           <p className="text-slate-500">
             {type === 'new' 
               ? 'Register a new travel agency in Somaliland.' 
+              : type === 'update'
+              ? 'Submit changes to an existing agency for approval.'
               : 'Extend the license of an existing travel agency.'}
           </p>
         </div>
@@ -526,8 +610,8 @@ function NewApplicationPageContent() {
       <div className="flex items-center justify-between px-12 relative before:absolute before:left-12 before:right-12 before:top-5 before:h-0.5 before:bg-slate-200">
         {[
           { step: 1, label: type === 'new' ? 'Identity Check' : 'Find Agency' },
-          { step: 2, label: 'Documents' },
-          { step: 3, label: 'Financials' },
+          { step: 2, label: type === 'update' ? 'Update Details' : 'Documents' },
+          { step: 3, label: type === 'update' ? 'Review & Submit' : 'Financials' },
         ].map((s, idx) => (
           <div key={idx} className="relative z-10 flex flex-col items-center gap-2">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-all duration-300 ${
@@ -552,10 +636,12 @@ function NewApplicationPageContent() {
             <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
               {type === 'new' ? (
                 <Building2 className="w-5 h-5 text-blue-600" />
+              ) : type === 'update' ? (
+                <Building2 className="w-5 h-5 text-green-600" />
               ) : (
                 <History className="w-5 h-5 text-amber-500" />
               )}
-              {type === 'new' ? 'Agency Verification' : 'Retrieve Existing Record'}
+              {type === 'new' ? 'Agency Verification' : type === 'update' ? 'Find Agency to Update' : 'Retrieve Existing Record'}
             </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -595,6 +681,8 @@ function NewApplicationPageContent() {
                   <p className="text-xs font-bold text-green-600 mt-1 animate-in fade-in slide-in-from-top-1 duration-300">
                     {type === 'new' 
                       ? '✓ This agency name is available for registration.' 
+                      : type === 'update'
+                      ? '✓ Agency found. Select it below to load data for updating.'
                       : '✓ Agency record found and verified for renewal.'}
                   </p>
                 )}
@@ -603,7 +691,7 @@ function NewApplicationPageContent() {
                     ✕ {nameError}
                   </p>
                 )}
-                {type === 'renewal' && existingAgencies.length > 0 && !selectedAgency && (
+                {(type === 'renewal' || type === 'update') && existingAgencies.length > 0 && !selectedAgency && (
                   <div className="mt-4 space-y-2 max-h-60 overflow-y-auto p-2 bg-slate-50 rounded-2xl border border-slate-200 animate-in fade-in slide-in-from-top-2 duration-300">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-2">Select matching agency from records:</p>
                     {existingAgencies.map((agency) => (
@@ -668,7 +756,7 @@ function NewApplicationPageContent() {
                         <div>
                           <p className="text-sm font-black text-slate-900 group-hover:text-blue-700">{agency.name}</p>
                           <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded uppercase">{agency.licenseId}</span>
+                            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded uppercase">{agency.license_id || agency.licenseId}</span>
                             <span className="text-xs text-slate-400 font-medium">• {agency.city}</span>
                           </div>
                         </div>
@@ -687,7 +775,7 @@ function NewApplicationPageContent() {
                         <CheckCircle2 className="w-6 h-6 text-green-600" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-green-800 uppercase tracking-tight">Agency Selected for Renewal</p>
+                        <p className="text-xs font-bold text-green-800 uppercase tracking-tight">Agency Selected for {type === 'update' ? 'Update' : 'Renewal'}</p>
                         <p className="text-sm font-black text-green-900">{selectedAgency.name}</p>
                       </div>
                     </div>
@@ -1078,7 +1166,15 @@ function NewApplicationPageContent() {
                           }
                           const action = isUploaded ? 'Replaced' : 'Uploaded';
                           try {
-                            const key = await uploadFileToR2(file, `applications/${agencyName}/docs`);
+                            // Delete old file from R2 when replacing
+                            if (isUploaded && docFileData[doc]) {
+                              fetch('/api/storage', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'deleteFile', key: docFileData[doc] })
+                              }).catch(() => {});
+                            }
+                            const key = await uploadFileToR2(file, `agencies/${agencyName}/documents`);
                             setDocFileData((prev) => ({ ...prev, [doc]: key }));
                             setUploadedDocs((prev) => prev.includes(doc) ? prev : [...prev, doc]);
                             setDocFileNames((prev) => ({ ...prev, [doc]: file.name }));
@@ -1163,6 +1259,8 @@ function NewApplicationPageContent() {
                   type="button"
                   onClick={() => {
                     // Item 13: Mandatory document validation
+                    // TEMPORARY: Disabled document requirement
+                    /*
                     const allDocs = [
                       'Application Letter',
                       'National ID cards (Staff & Management)',
@@ -1182,6 +1280,7 @@ function NewApplicationPageContent() {
                       alert(`Please upload all mandatory documents before proceeding.\n\nMissing (${missing.length}):\n• ${missing.join('\n• ')}`);
                       return;
                     }
+                    */
                     setCurrentStep(3);
                   }}
                   className="px-8 py-2.5 rounded-xl font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-2"

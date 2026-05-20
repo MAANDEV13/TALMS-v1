@@ -28,6 +28,10 @@ export default function ReportsPage() {
   const [regionalDensity, setRegionalDensity] = useState<any[]>([]);
   const [userReports, setUserReports] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [agencies, setAgencies] = useState<any[]>([]);
+  const [agencySearch, setAgencySearch] = useState('');
+  const [agencyPage, setAgencyPage] = useState(1);
+  const AGENCIES_PER_PAGE = 10;
 
   useEffect(() => {
     async function loadData() {
@@ -60,11 +64,14 @@ export default function ReportsPage() {
           activeAgencies: agencies.filter((a: any) => a.status === 'Active').length,
           expiredAgencies: agencies.filter((a: any) => a.status === 'Expired').length,
           pendingApps: apps.filter((a: any) => (a.status || '').includes('Review')).length,
+          approvedApps: apps.filter((a: any) => (a.status || '').includes('Approved')).length,
           newApps: apps.filter((a: any) => a.type === 'New').length,
           renewalApps: apps.filter((a: any) => a.type === 'Renewal').length,
+          updateApps: apps.filter((a: any) => a.type === 'Update').length,
           totalFines: (Array.isArray(fines) ? fines : []).length,
         });
         setRevenue(licenseRevenue + fineRevenue);
+        setAgencies(agencies);
 
         // Regional density
         const regions = ['Maroodi Jeex', 'Togdheer', 'Awdal', 'Saaxil', 'Sool', 'Sanaag', 'Gabiley'];
@@ -163,6 +170,7 @@ export default function ReportsPage() {
           <div class="grid">
             <div class="stat-box"><p>Total Registry</p><h3>${stats.totalAgencies}</h3></div>
             <div class="stat-box"><p>Active Licenses</p><h3>${stats.activeAgencies}</h3></div>
+            <div class="stat-box"><p>Approved Apps</p><h3>${stats.approvedApps || 0}</h3></div>
             <div class="stat-box"><p>Total Revenue</p><h3>$${revenue.toLocaleString()}</h3></div>
             <div class="stat-box"><p>Pending Applications</p><h3>${stats.pendingApps}</h3></div>
           </div>
@@ -258,21 +266,21 @@ export default function ReportsPage() {
       )}
 
       {/* High Level Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {[
           { label: 'Total Registry', value: stats.totalAgencies, icon: Building2, color: 'blue', detail: 'Licensed Agencies' },
-          { label: 'Total Revenue', value: `$${revenue.toLocaleString()}`, icon: DollarSign, color: 'green', detail: 'FY 2026 To Date' },
-          { label: 'Active Licenses', value: stats.activeAgencies, icon: CheckCircle2, color: 'indigo', detail: 'Fully Compliant' },
+          { label: 'Active Licenses', value: stats.activeAgencies, icon: CheckCircle2, color: 'green', detail: 'Fully Compliant' },
+          { label: 'Approved', value: stats.approvedApps || 0, icon: FileText, color: 'indigo', detail: 'Approved Applications' },
           { label: 'Pending Apps', value: stats.pendingApps, icon: Clock, color: 'amber', detail: 'In Review Pipeline' },
-          { label: 'Total Penalties', value: stats.totalFines, icon: AlertCircle, color: 'red', detail: 'Enforcement Actions' },
-        ].slice(0, 4).map((stat, i) => (
-          <div key={i} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/40 transition-all group">
-            <div className={`w-12 h-12 rounded-2xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
-              <stat.icon className="w-6 h-6" />
+          { label: 'Total Revenue', value: `$${revenue.toLocaleString()}`, icon: DollarSign, color: 'emerald', detail: 'FY 2026 To Date' },
+        ].map((stat, i) => (
+          <div key={i} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg hover:shadow-slate-200/40 transition-all group">
+            <div className={`w-10 h-10 rounded-xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
+              <stat.icon className="w-5 h-5" />
             </div>
-            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">{stat.label}</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-1">{stat.value}</h3>
-            <p className="text-xs text-slate-500 mt-2 font-medium">{stat.detail}</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</p>
+            <h3 className="text-xl font-black text-slate-900 mt-0.5">{stat.value}</h3>
+            <p className="text-[10px] text-slate-500 mt-1 font-medium">{stat.detail}</p>
           </div>
         ))}
       </div>
@@ -437,6 +445,119 @@ export default function ReportsPage() {
           )}
         </div>
       )}
+
+      {/* Agency Directory Table */}
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-blue-600" />
+              Agency Directory
+            </h3>
+            <p className="text-sm text-slate-500 mt-1">Complete list of all registered agencies.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <input
+                type="text"
+                className="pl-8 pr-3 py-2 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"
+                placeholder="Search agencies..."
+                value={agencySearch}
+                onChange={(e) => { setAgencySearch(e.target.value); setAgencyPage(1); }}
+              />
+              <Activity className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            </div>
+            <button
+              onClick={() => {
+                const csv = ['Name,License ID,Region,City,Status,Contact,Phone,Email,Issue Date,Expiry Date'];
+                agencies.forEach((a: any) => {
+                  csv.push(`"${a.name || ''}","${a.license_id || ''}","${a.region || ''}","${a.city || ''}","${a.status || ''}","${a.contact_person || ''}","${a.phone || ''}","${a.email || ''}","${a.issue_date || ''}","${a.expiry_date || ''}"`);
+                });
+                const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `TALMS_Agencies_${new Date().toISOString().split('T')[0]}.csv`;
+                link.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-xs font-bold rounded-xl hover:bg-green-700 transition-all"
+            >
+              <Download className="w-3.5 h-3.5" />
+              CSV
+            </button>
+          </div>
+        </div>
+        {(() => {
+          const filtered = agencies.filter((a: any) =>
+            (a.name || '').toLowerCase().includes(agencySearch.toLowerCase()) ||
+            (a.license_id || '').toLowerCase().includes(agencySearch.toLowerCase()) ||
+            (a.region || '').toLowerCase().includes(agencySearch.toLowerCase()) ||
+            (a.city || '').toLowerCase().includes(agencySearch.toLowerCase())
+          );
+          const totalPages = Math.ceil(filtered.length / AGENCIES_PER_PAGE);
+          const paged = filtered.slice((agencyPage - 1) * AGENCIES_PER_PAGE, agencyPage * AGENCIES_PER_PAGE);
+          return (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">#</th>
+                      <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Agency</th>
+                      <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">License ID</th>
+                      <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Region</th>
+                      <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                      <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Expiry</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {paged.map((a: any, i: number) => (
+                      <tr key={a.id || i} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-3 text-xs text-slate-400 font-bold">{(agencyPage - 1) * AGENCIES_PER_PAGE + i + 1}</td>
+                        <td className="px-6 py-3 text-sm font-bold text-slate-900">{a.name}</td>
+                        <td className="px-6 py-3 text-xs font-bold text-blue-600">{a.license_id || '—'}</td>
+                        <td className="px-6 py-3 text-sm text-slate-600">{a.region || '—'}</td>
+                        <td className="px-6 py-3">
+                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-lg border ${
+                            a.status === 'Active' ? 'bg-green-50 text-green-700 border-green-200' :
+                            a.status === 'Expired' ? 'bg-red-50 text-red-700 border-red-200' :
+                            'bg-slate-50 text-slate-600 border-slate-200'
+                          }`}>{a.status || 'Unknown'}</span>
+                        </td>
+                        <td className="px-6 py-3 text-xs text-slate-500">{a.expiry_date || '—'}</td>
+                      </tr>
+                    ))}
+                    {paged.length === 0 && (
+                      <tr><td colSpan={6} className="px-6 py-8 text-center text-sm text-slate-400">No agencies found.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {totalPages > 1 && (
+                <div className="p-4 border-t border-slate-100 flex items-center justify-between">
+                  <p className="text-xs text-slate-400 font-bold">
+                    Showing {(agencyPage - 1) * AGENCIES_PER_PAGE + 1}–{Math.min(agencyPage * AGENCIES_PER_PAGE, filtered.length)} of {filtered.length}
+                  </p>
+                  <div className="flex gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setAgencyPage(i + 1)}
+                        className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+                          agencyPage === i + 1 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {i + 1}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </div>
 
       {/* Minister Note */}
       {user?.role === 'minister' && (

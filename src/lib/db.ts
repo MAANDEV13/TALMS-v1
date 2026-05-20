@@ -126,6 +126,46 @@ export async function getNotifications() {
   return await d1Query('SELECT * FROM notifications ORDER BY created_at DESC');
 }
 
+export async function getNotificationsForUser(userId?: string, role?: string) {
+  // Return notifications targeted at this user, their role, or all users (no user_id/role set)
+  return await d1Query(
+    `SELECT * FROM notifications 
+     WHERE (user_id IS NULL AND role IS NULL) 
+        OR user_id = ? 
+        OR role = ? 
+     ORDER BY created_at DESC`,
+    [userId || '', role || '']
+  );
+}
+
+export async function createNotification(notif: {
+  title: string; message?: string; type?: string; link?: string;
+  user_id?: string; role?: string;
+}) {
+  await d1Execute(
+    `INSERT INTO notifications (id, user_id, role, title, message, type, link, unread)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+    [crypto.randomUUID(), notif.user_id || null, notif.role || null,
+     notif.title, notif.message || null, notif.type || 'system', notif.link || null]
+  );
+}
+
+export async function markNotificationRead(id: string) {
+  await d1Execute('UPDATE notifications SET unread = 0 WHERE id = ?', [id]);
+}
+
+export async function markAllNotificationsRead(userId?: string, role?: string) {
+  if (userId) {
+    await d1Execute(
+      `UPDATE notifications SET unread = 0 
+       WHERE (user_id IS NULL AND role IS NULL) OR user_id = ? OR role = ?`,
+      [userId, role || '']
+    );
+  } else {
+    await d1Execute('UPDATE notifications SET unread = 0');
+  }
+}
+
 export async function clearNotifications() {
   await d1Execute('DELETE FROM notifications');
 }

@@ -403,20 +403,16 @@ export default function AgenciesPage() {
                     </td>
                   )}
                   <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
-                    <button 
-                      onClick={() => handleRequestChange(agency.id, 'edit')}
-                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                      title="Request Edit"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => handleRequestChange(agency.id, 'delete')}
-                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                      title="Request Deletion"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {(user?.role === 'officer' || user?.role === 'regional_director') && (
+                      <Link
+                        href={`/licenses/new?type=update&agency=${agency.id}`}
+                        className="px-3 py-1.5 text-green-600 hover:bg-green-50 border border-green-100 rounded-lg transition-all text-xs font-bold flex items-center gap-1.5"
+                        title="Submit Update Application"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        Update
+                      </Link>
+                    )}
                     <Link 
                       href={`/agencies/${agency.id}`}
                       className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"

@@ -104,3 +104,15 @@ CREATE TABLE IF NOT EXISTS agency_changes (
   date TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  role TEXT,
+  title TEXT NOT NULL,
+  message TEXT,
+  type TEXT DEFAULT 'system', -- 'system', 'approval', 'reminder', 'alert', 'announcement'
+  link TEXT,
+  unread INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now'))
+);
