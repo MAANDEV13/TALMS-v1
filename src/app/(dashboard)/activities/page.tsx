@@ -12,7 +12,8 @@ import {
   Building2,
   AlertCircle,
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  Download
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -23,13 +24,26 @@ export default function ActivitiesPage() {
   const [filterAction, setFilterAction] = useState('All');
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [userRoles, setUserRoles] = useState<Record<string, string>>({});
 
   const loadActivities = useCallback(async () => {
     try {
-      const res = await fetch('/api/data?table=activities');
-      if (res.ok) {
-        const data = await res.json();
+      const [actRes, usersRes] = await Promise.all([
+        fetch('/api/data?table=activities'),
+        fetch('/api/data?table=users').catch(() => null)
+      ]);
+      if (actRes.ok) {
+        const data = await actRes.json();
         setActivities(Array.isArray(data) ? data : []);
+      }
+      // Build name→role map from users table
+      if (usersRes?.ok) {
+        const users = await usersRes.json();
+        const roleMap: Record<string, string> = {};
+        (Array.isArray(users) ? users : []).forEach((u: any) => {
+          if (u.name) roleMap[u.name.toLowerCase()] = (u.role || '').replace('_', ' ');
+        });
+        setUserRoles(roleMap);
       }
     } catch (err) {
       console.error('Failed to load activities:', err);
@@ -62,6 +76,31 @@ export default function ActivitiesPage() {
     }
   };
 
+  const getUserRole = (name: string) => {
+    const role = userRoles[(name || '').toLowerCase()];
+    if (role) return role.charAt(0).toUpperCase() + role.slice(1);
+    return 'System User';
+  };
+
+  const handleExportAudit = () => {
+    const headers = ['Administrator', 'Role', 'Action', 'Target', 'Time', 'Date'];
+    const rows = filteredActivities.map(log => [
+      log.user || log.user_name || '', getUserRole(log.user || log.user_name),
+      log.action || '', log.target || '',
+      formatGMT3(log.created_at).time || log.time || '',
+      formatGMT3(log.created_at).date || log.date || ''
+    ]);
+    const escapeCell = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [headers.map(escapeCell).join(','), ...rows.map(r => r.map(escapeCell).join(','))].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `talms-audit-logs-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const filteredActivities = activities.filter(a => {
     const searchMatch = 
       (a.user || a.user_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -85,6 +124,13 @@ export default function ActivitiesPage() {
           <p className="text-slate-500 mt-1">Chronological record of all administrative actions and security events.</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleExportAudit}
+            className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-xl text-sm font-bold hover:bg-green-700 transition-all active:scale-95 shadow-sm"
+          >
+            <Download className="w-4 h-4" />
+            Export Excel
+          </button>
           <button
             onClick={loadActivities}
             className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all active:scale-95"
@@ -164,7 +210,7 @@ export default function ActivitiesPage() {
                       </div>
                       <div>
                         <p className="text-sm font-bold text-slate-900 leading-tight">{log.user || log.user_name}</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Authorized Session</p>
+                        <p className="text-[10px] text-blue-500 font-black uppercase tracking-tighter">{getUserRole(log.user || log.user_name)}</p>
                       </div>
                     </div>
                   </td>

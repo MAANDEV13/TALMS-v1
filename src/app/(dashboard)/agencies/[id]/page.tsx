@@ -35,6 +35,7 @@ export default function AgencyDetailPage() {
   const { user } = useAuth();
   const [agency, setAgency] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
+  const [userRoles, setUserRoles] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'history'>('overview');
   const [editingDates, setEditingDates] = useState(false);
@@ -67,9 +68,10 @@ export default function AgencyDetailPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [agencyRes, activityRes] = await Promise.all([
+        const [agencyRes, activityRes, usersRes] = await Promise.all([
           fetch('/api/data?table=agencies'),
-          fetch('/api/data?table=activities')
+          fetch('/api/data?table=activities'),
+          fetch('/api/data?table=users').catch(() => null)
         ]);
         
         if (agencyRes.ok) {
@@ -106,6 +108,16 @@ export default function AgencyDetailPage() {
         if (activityRes.ok) {
           const allActivities = await activityRes.json();
           setActivities(Array.isArray(allActivities) ? allActivities : []);
+        }
+        
+        // Build name→role map
+        if (usersRes?.ok) {
+          const users = await usersRes.json();
+          const roleMap: Record<string, string> = {};
+          (Array.isArray(users) ? users : []).forEach((u: any) => {
+            if (u.name) roleMap[u.name.toLowerCase()] = (u.role || '').replace('_', ' ');
+          });
+          setUserRoles(roleMap);
         }
       } catch (err) {
         console.error('Failed to load data:', err);
@@ -626,8 +638,8 @@ export default function AgencyDetailPage() {
                               <User className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
                             </div>
                             <div>
-                              <p className="text-sm font-bold text-slate-900">{log.user}</p>
-                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Authorized Session</p>
+                              <p className="text-sm font-bold text-slate-900">{log.user || log.user_name}</p>
+                              <p className="text-[10px] text-blue-500 font-black uppercase tracking-tighter">{(() => { const r = userRoles[((log.user || log.user_name) || '').toLowerCase()]; return r ? r.charAt(0).toUpperCase() + r.slice(1) : 'System User'; })()}</p>
                             </div>
                           </div>
                         </td>
